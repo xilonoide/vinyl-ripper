@@ -81,25 +81,58 @@ public sealed class RipServiceRetryTests : IDisposable
         if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
     }
 
-    /// <summary>Descargador falso: falla las pistas indicadas las primeras N veces y apunta cada llamada.</summary>
+    /// <summary>
+    /// Descargador falso (seguro con varias descargas a la vez): falla las pistas indicadas las primeras N
+    /// veces, apunta cada llamada y cuántas hay en marcha a la vez. Con <see cref="Mp3Template"/> deja un
+    /// MP3 de verdad en su sitio (para que ffmpeg pueda incrustarle la portada).
+    /// </summary>
     private sealed class FakeDownloader : IAudioDownloader
     {
+        private readonly object _gate = new();
+        private int _running;
+
         public Dictionary<string, int> FailuresLeft { get; } = new();
         public List<(string Source, string Directory, string FileName)> Calls { get; } = [];
+        public int MaxConcurrent { get; private set; }
+        public TimeSpan Duration { get; init; } = TimeSpan.Zero;
+        public string? Mp3Template { get; init; }
+        public Action<string>? OnDownload { get; init; }
 
-        public Task<string> DownloadMp3Async(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension,
+        public async Task<string> DownloadMp3Async(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension,
             IProgress<YtDlpProgress>? progress = null, CancellationToken ct = default)
         {
-            Calls.Add((urlOrSearch, outputDirectory, fileNameWithoutExtension));
-            if (FailuresLeft.TryGetValue(fileNameWithoutExtension, out var left) && left > 0)
+            bool fail;
+            lock (_gate)
             {
-                FailuresLeft[fileNameWithoutExtension] = left - 1;
-                throw new YtDlpException("ERROR: HTTP Error 500: Internal Server Error");
+                Calls.Add((urlOrSearch, outputDirectory, fileNameWithoutExtension));
+                MaxConcurrent = Math.Max(MaxConcurrent, ++_running);
+                fail = FailuresLeft.TryGetValue(fileNameWithoutExtension, out var left) && left > 0;
+                if (fail) FailuresLeft[fileNameWithoutExtension] = left - 1;
             }
-            return Task.FromResult(Path.Combine(outputDirectory, fileNameWithoutExtension + ".mp3"));
+            try
+            {
+                OnDownload?.Invoke(fileNameWithoutExtension);
+                if (Duration > TimeSpan.Zero) await Task.Delay(Duration, ct);
+                if (fail) throw new YtDlpException("ERROR: HTTP Error 500: Internal Server Error");
+
+                var path = Path.Combine(outputDirectory, fileNameWithoutExtension + ".mp3");
+                if (Mp3Template is not null)
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                    File.Copy(Mp3Template, path, overwrite: true);
+                }
+                return path;
+            }
+            finally
+            {
+                lock (_gate) _running--;
+            }
         }
 
-        public int CallsFor(string fileName) => Calls.Count(c => c.FileName == fileName);
+        public int CallsFor(string fileName)
+        {
+            lock (_gate) return Calls.Count(c => c.FileName == fileName);
+        }
     }
 
     private sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
@@ -153,7 +186,9 @@ public sealed class RipServiceRetryTests : IDisposable
         Assert.Equal(2, dogs.Count);
         Assert.Equal(dogs[0], dogs[1]);
         // El reintento va después de todas las demás, no justo tras el fallo.
-        Assert.Equal("Pink Floyd - Sheep", downloader.Calls[2].FileName);
+        var lastDogs = downloader.Calls.FindLastIndex(c => c.FileName == "Pink Floyd - Dogs");
+        Assert.True(downloader.Calls.FindIndex(c => c.FileName == "Pink Floyd - Sheep") < lastDogs);
+        Assert.Equal(downloader.Calls.Count - 1, lastDogs);
         Assert.Contains(RipPhase.Retrying, phases);
     }
 
@@ -194,4 +229,136 @@ public sealed class RipServiceRetryTests : IDisposable
         Assert.Equal("Pink Floyd - Anonim A2", downloader.Calls[^1].FileName);
         Assert.Equal(Path.Combine(_dir, "Pink Floyd - Animals (1977)"), downloader.Calls[^1].Directory);
     }
+
+    [Fact]
+    public async Task Downloads_three_at_a_time_and_no_more()
+    {
+        var downloader = new FakeDownloader { Duration = TimeSpan.FromMilliseconds(60) };
+        var tracks = Tracks(Enumerable.Range(1, 8).Select(i => ($"A{i}", $"Pista {i}")).ToArray());
+
+        var result = await Service(downloader).RipAsync(tracks, _dir);
+
+        Assert.Equal(8, result.Downloaded);
+        Assert.Equal(RipService.MaxParallelDownloads, downloader.MaxConcurrent);
+    }
+
+    [Fact]
+    public async Task Progress_counts_finished_and_running_tracks()
+    {
+        var downloader = new FakeDownloader { Duration = TimeSpan.FromMilliseconds(40) };
+        var reports = new List<RipProgress>();
+        var gate = new object();
+
+        await Service(downloader).RipAsync(Tracks(("A1", "Pigs"), ("A2", "Dogs"), ("B1", "Sheep"), ("B2", "Pigs 2")), _dir,
+            new SyncProgress<RipProgress>(p => { lock (gate) reports.Add(p); }));
+
+        var downloading = reports.Where(r => r.Phase == RipPhase.Downloading).ToList();
+        Assert.All(downloading, r => Assert.InRange(r.ActiveTracks.Count, 0, RipService.MaxParallelDownloads));
+        Assert.Contains(downloading, r => r.ActiveTracks.Count == RipService.MaxParallelDownloads);
+        Assert.Equal(4, downloading.Max(r => r.CompletedTracks));
+        Assert.Equal(100, reports[^1].OverallPercent);
+    }
+
+    [Fact]
+    public async Task Cover_is_kept_until_every_track_of_the_release_has_it_in_its_id3()
+    {
+        var ffmpeg = ToolLocator.FindOnPath(ToolLocator.FfmpegFileName);
+        if (ffmpeg is null) return; // sin ffmpeg no se puede incrustar nada
+
+        var temp = Path.Combine(_dir, "temp");
+        var mp3 = await RunFfmpegAsync(ffmpeg, Path.Combine(_dir, "silencio.mp3"),
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "1", "-c:a", "libmp3lame", "-b:a", "96k");
+        var jpeg = await RunFfmpegAsync(ffmpeg, Path.Combine(_dir, "portada.jpg"),
+            "-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1");
+        var coverPath = Path.Combine(temp, "cover-99.jpg");
+
+        // La portada debe seguir ahí en cada descarga: si se borrase antes de tiempo, las pistas
+        // posteriores del disco se quedarían sin ella en el ID3.
+        var missingCoverAt = new List<string>();
+        var downloader = new FakeDownloader
+        {
+            Duration = TimeSpan.FromMilliseconds(30),
+            Mp3Template = mp3,
+            OnDownload = name => { if (!File.Exists(coverPath)) lock (missingCoverAt) missingCoverAt.Add(name); },
+        };
+        var cache = new ReleaseDetailsCache(Path.Combine(_dir, "cache"));
+        cache.Store(new ReleaseDetails(99, "Pink Floyd", "Animals", 1977, [], [], "https://i.discogs.com/animals.jpg"));
+        var images = new HttpClient(new ImageHandler(File.ReadAllBytes(jpeg))) { BaseAddress = new Uri(DiscogsClient.BaseUrl) };
+        var service = new RipService(new DiscogsClient(images, "tok"), downloader, new CoverArtEmbedder(ffmpeg, temp), cache, TimeSpan.Zero);
+
+        var result = await service.RipAsync(Tracks(Enumerable.Range(1, 5).Select(i => ($"A{i}", $"Pista {i}")).ToArray()), _dir);
+
+        Assert.Equal(5, result.Downloaded);
+        Assert.Empty(result.ReleasesWithoutCover);
+        Assert.Empty(missingCoverAt);
+        foreach (var file in Directory.GetFiles(Path.Combine(_dir, "Pink Floyd - Animals (1977)"), "*.mp3"))
+            Assert.Contains("APIC", Encoding.Latin1.GetString(File.ReadAllBytes(file)));
+        Assert.False(File.Exists(coverPath)); // y al terminar, fuera de temp
+    }
+
+    private sealed class ImageHandler(byte[] image) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(image) });
+    }
+
+    private static async Task<string> RunFfmpegAsync(string ffmpeg, string output, params string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(ffmpeg) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+        foreach (var a in new[] { "-hide_banner", "-nostdin", "-loglevel", "error", "-y" }.Concat(args).Append(output)) psi.ArgumentList.Add(a);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        await p.StandardError.ReadToEndAsync();
+        await p.WaitForExitAsync();
+        Assert.True(File.Exists(output), $"ffmpeg no generó {output}");
+        return output;
+    }
+}
+
+public class RipEtaTests
+{
+    [Fact]
+    public void Says_nothing_until_there_is_some_history()
+    {
+        var now = TimeSpan.Zero;
+        var eta = new RipEta(() => now);
+
+        now = TimeSpan.FromSeconds(10);
+        Assert.Null(eta.Remaining(0.5));
+        now = TimeSpan.FromSeconds(30);
+        Assert.Null(eta.Remaining(0));
+    }
+
+    [Fact]
+    public void Extrapolates_the_pace_so_far()
+    {
+        var now = TimeSpan.Zero;
+        var eta = new RipEta(() => now);
+
+        now = TimeSpan.FromMinutes(10);
+        Assert.Equal(TimeSpan.FromMinutes(30), eta.Remaining(0.25));   // 10 min por cada 25 %
+        Assert.Equal(TimeSpan.Zero, eta.Remaining(1));
+    }
+
+    [Fact]
+    public void Restart_counts_from_now()
+    {
+        var now = TimeSpan.Zero;
+        var eta = new RipEta(() => now);
+        now = TimeSpan.FromMinutes(60);
+        eta.Restart();
+
+        now = TimeSpan.FromMinutes(61);
+        Assert.Equal(TimeSpan.FromMinutes(1), eta.Remaining(0.5));
+    }
+
+    [Theory]
+    [InlineData(20, "queda menos de 1 min")]
+    [InlineData(60, "quedan ~1 min")]
+    [InlineData(61, "quedan ~2 min")]
+    [InlineData(47 * 60 + 10, "quedan ~48 min")]
+    [InlineData(3600, "quedan ~1 h 00 min")]
+    [InlineData(2 * 3600 + 4 * 60 + 1, "quedan ~2 h 05 min")]
+    public void Formats_rounding_up(int seconds, string expected) =>
+        Assert.Equal(expected, RipEta.Format(TimeSpan.FromSeconds(seconds)));
 }

@@ -33,7 +33,8 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🖼 **Portada en cada MP3** | Tras generar cada MP3 se le incrusta la portada del disco en Discogs (la misma en todas sus pistas) como etiqueta **ID3v2.3**, con ffmpeg y sin recodificar el audio. Si un disco no tiene portada, el resumen final lo indica. |
 | 🏷 **Nombres limpios** | Cada MP3 se llama `Artista - Canción`, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Artista - Anonim A1`, `Artista - Anonim A2`…). |
 | ⚡ **Discogs sólo una vez** | El detalle de cada disco (tracklist, vídeos y portada) se guarda en `Documentos/vinyl-ripper/cache` y no se vuelve a pedir a la API, ni en siguientes arranques. Añadir un disco que ya está entero en *Seleccionados* ni siquiera lo consulta. Si algún disco cambia en Discogs, **Vaciar caché** en ⚙ hace que se vuelva a pedir. |
-| 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso por pista (el total se conoce desde el principio). |
+| 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso global con el **tiempo estimado** que falta y las pistas que se están bajando. |
+| ⏩ **3 a la vez** | Se bajan 3 pistas en paralelo: unas tres veces más rápido, sin llegar a lo que haría que YouTube empezase a bloquear. |
 | 🚀 **Pantalla de inicio** | Lo primero que se ve al abrir la app, al menos 3 segundos y hasta que la ventana principal está lista. La misma imagen ilustra el instalador y el desinstalador. |
 | 💾 **Todo se recuerda** | Lista elegida, filtro, discos seleccionados, tamaño y posición de ventana… se guardan a cada cambio. |
 | 🌙 **Modo oscuro de verdad** | Desplegables, listas, hovers, scrollbars, tooltips, diálogos y hasta la barra de título nativa. |
@@ -66,7 +67,7 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 2. En **Fuente** elige una carpeta de la colección, deseados, inventario o una lista; los discos se cargan con progreso por páginas.
 3. Marca discos y pulsa **Añadir discos completos ➜**, o marca uno para ver sus **Pistas** y añade sólo las que quieras con **Añadir pistas ➜** (o con doble clic). Cambia de carpeta o lista y sigue acumulando.
 4. ¿No sabes si es la versión buena? Pulsa **▶** en cualquier pista, en *Pistas* o en *Seleccionados*, para escucharla. Pincha en la barra de abajo para saltar a otro punto y **■** para parar.
-5. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada; el progreso es por pista.
+5. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada. Abajo se ve cuántas van, cuánto falta y qué pistas se están bajando. **Cancelar** pide confirmación antes de parar.
 6. **📂 Abrir carpeta de salida** abre la última carpeta creada en el Explorador.
 
 ### 📁 Dónde acaba todo
@@ -142,7 +143,7 @@ pwsh assets/make-splash.ps1
 dotnet test
 ```
 
-Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto, reintento si el antivirus lo tiene abierto), la caché de discos (sobrevive a reinicios, una sola llamada aunque se pida a la vez, reintento tras un fallo, archivos rotos o de otra versión), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429 y en errores 5xx, parseo de tracklists), el ripeo con un descargador falso (reintento automático al final, fallos que se devuelven juntos y se pueden reintentar, nombres que no cambian al reintentar), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (`Artista - Canción`, recopilatorios, saneado, títulos repetidos por posición del vinilo), la escucha previa (argumentos de yt-dlp en m4a, caché de pistas escuchadas, formato de tiempos), la limpieza de `temp` y su vigilante (espera al proceso, PID reutilizado), las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
+Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto, reintento si el antivirus lo tiene abierto), la caché de discos (sobrevive a reinicios, una sola llamada aunque se pida a la vez, reintento tras un fallo, archivos rotos o de otra versión), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429 y en errores 5xx, parseo de tracklists), el ripeo con un descargador falso (nunca más de 3 pistas a la vez, progreso de las que están en marcha, reintento automático al final, fallos que se devuelven juntos y se pueden reintentar, nombres que no cambian al reintentar y, con ffmpeg, que la portada no se borra hasta que todas las pistas del disco la llevan en su ID3), el tiempo estimado, el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (`Artista - Canción`, recopilatorios, saneado, títulos repetidos por posición del vinilo), la escucha previa (argumentos de yt-dlp en m4a, caché de pistas escuchadas, formato de tiempos), la limpieza de `temp` y su vigilante (espera al proceso, PID reutilizado), las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
 
 ## 🏗️ Arquitectura
 
@@ -153,8 +154,8 @@ vinyl-ripper/
 │   │   ├── Configuration/      AppPaths · AppSettings · SettingsStore · TempJanitor (vacía temp al terminar la app)
 │   │   ├── Security/           TokenProtector (AES-256-GCM + PBKDF2)
 │   │   ├── Discogs/            DiscogsClient · ReleaseDetailsCache · modelos
-│   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader · parser de progreso
-│   │   ├── Ripping/            RipService · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
+│   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader (IAudioDownloader) · parser de progreso
+│   │   ├── Ripping/            RipService (3 a la vez, reintentos) · RipEta · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
 │   │   └── Preview/            TrackPreviewService (pista en m4a para escucharla) · PreviewTime
 │   └── VinylRipper.Windows/    🪟 WPF (net10.0-windows), MVVM con CommunityToolkit.Mvvm
 │       ├── Program.cs          Main propio: arranca la app o, con un argumento, sólo el vigilante de temp

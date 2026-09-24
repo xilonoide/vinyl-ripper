@@ -11,17 +11,20 @@ public enum RipPhase { Resolving, Downloading, Retrying, Done }
 /// <summary>Estado de un ripeo en curso, pensado para alimentar una barra de progreso.</summary>
 /// <param name="CompletedTracks">Pistas terminadas en esta pasada (la normal o la de reintento).</param>
 /// <param name="TotalTracks">Pistas de esta pasada.</param>
+/// <param name="CurrentRelease">Disco que se está preparando (fase <see cref="RipPhase.Resolving"/>).</param>
+/// <param name="ActiveTracks">Pistas que se están bajando ahora mismo (hasta <see cref="RipService.MaxParallelDownloads"/>).</param>
+/// <param name="ActiveFraction">Suma de lo que llevan las pistas en marcha, cada una de 0 a 1.</param>
 public sealed record RipProgress(
     RipPhase Phase,
     int CompletedTracks,
     int TotalTracks,
     string CurrentRelease,
-    string? CurrentTrack,
-    double CurrentTrackPercent)
+    IReadOnlyList<string> ActiveTracks,
+    double ActiveFraction)
 {
     /// <summary>Porcentaje global 0..100.</summary>
     public double OverallPercent => TotalTracks > 0
-        ? Math.Clamp(100.0 * (CompletedTracks + CurrentTrackPercent / 100.0) / TotalTracks, 0, 100)
+        ? Math.Clamp(100.0 * (CompletedTracks + ActiveFraction) / TotalTracks, 0, 100)
         : 0;
 }
 
@@ -94,14 +97,14 @@ public sealed class RipService
         var result = first;
         if (first.Failures.Count > 0)
         {
-            progress?.Report(new RipProgress(RipPhase.Retrying, 0, first.Failures.Count, string.Empty, null, 0));
+            progress?.Report(new RipProgress(RipPhase.Retrying, 0, first.Failures.Count, string.Empty, [], 0));
             await Task.Delay(_retryPause, ct);
             var retry = await DownloadAsync(first.Failures.Select(f => f.Item).ToList(), RipPhase.Retrying, progress, ct);
             result = new Pass(first.Downloaded + retry.Downloaded, retry.Failures,
                 first.WithoutCover.Union(retry.WithoutCover).ToList());
         }
 
-        progress?.Report(new RipProgress(RipPhase.Done, items.Count, items.Count, string.Empty, null, 100));
+        progress?.Report(new RipProgress(RipPhase.Done, items.Count, items.Count, string.Empty, [], 0));
         return new RipResult(outputFolder, result.Downloaded, result.Failures, result.WithoutCover,
             RecoveredOnRetry: first.Failures.Count - result.Failures.Count);
     }
@@ -111,7 +114,7 @@ public sealed class RipService
         IProgress<RipProgress>? progress = null, CancellationToken ct = default)
     {
         var pass = await DownloadAsync(failures.Select(f => f.Item).ToList(), RipPhase.Retrying, progress, ct);
-        progress?.Report(new RipProgress(RipPhase.Done, failures.Count, failures.Count, string.Empty, null, 100));
+        progress?.Report(new RipProgress(RipPhase.Done, failures.Count, failures.Count, string.Empty, [], 0));
         return new RipResult(outputFolder, pass.Downloaded, pass.Failures, pass.WithoutCover,
             RecoveredOnRetry: pass.Downloaded);
     }
@@ -131,7 +134,7 @@ public sealed class RipService
             ct.ThrowIfCancellationRequested();
             var release = group.First().Release;
             var releaseName = BuildReleaseFolderName(release);
-            progress?.Report(new RipProgress(RipPhase.Resolving, items.Count, tracks.Count, releaseName, null, 0));
+            progress?.Report(new RipProgress(RipPhase.Resolving, items.Count, tracks.Count, releaseName, [], 0));
 
             IReadOnlyList<Video> videos = [];
             var coverUrl = release.Thumb; // si Discogs no responde, vale la miniatura de la lista
@@ -159,68 +162,167 @@ public sealed class RipService
         return items;
     }
 
-    /// <summary>Baja las pistas en orden, disco a disco, e incrusta la portada; los fallos se apuntan y se sigue.</summary>
+    /// <summary>
+    /// Pistas que se bajan a la vez. Cada una es una visita de yt-dlp a YouTube: con 2-3 simultáneas no
+    /// pasa nada, pero con más YouTube empieza a responder 429/403 o a pedir "confirma que no eres un bot".
+    /// </summary>
+    public const int MaxParallelDownloads = 3;
+
+    /// <summary>
+    /// Baja las pistas (<see cref="MaxParallelDownloads"/> a la vez, en orden de lista) e incrusta la
+    /// portada de su disco; los fallos se apuntan y se sigue con las demás.
+    /// </summary>
     private async Task<Pass> DownloadAsync(IReadOnlyList<RipItem> items, RipPhase phase,
         IProgress<RipProgress>? progress, CancellationToken ct)
     {
+        var tracker = new PassTracker(phase, items.Count, progress);
+        var covers = items.GroupBy(i => i.ReleaseDirectory)
+            .ToDictionary(g => g.Key, g => new ReleaseCover(this, g.First(), g.Count()));
         var failures = new List<RipFailure>();
-        var withoutCover = new List<string>();
         var downloaded = 0;
-        var completed = 0;
-        var total = items.Count;
+        var gate = new object();
 
-        foreach (var release in items.GroupBy(i => i.ReleaseDirectory))
+        using var slots = new SemaphoreSlim(MaxParallelDownloads);
+        var work = items.Select(async item =>
         {
-            ct.ThrowIfCancellationRequested();
-            var first = release.First();
-            var coverPath = await DownloadCoverAsync(first.Selection.Release.ReleaseId, first.CoverUrl, ct);
-            var releaseMissingCover = false;
-
-            foreach (var item in release)
+            await slots.WaitAsync(ct);
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                var snapshot = completed;
-                var title = item.Selection.Track.Title;
-                var trackProgress = new Progress<YtDlpProgress>(p =>
-                    progress?.Report(new RipProgress(phase, snapshot, total, item.ReleaseName, title, p.Percent)));
-                progress?.Report(new RipProgress(phase, completed, total, item.ReleaseName, title, 0));
-
-                string mp3;
-                try
+                var error = await DownloadOneAsync(item, covers[item.ReleaseDirectory], tracker, ct);
+                lock (gate)
                 {
-                    mp3 = await _downloader.DownloadMp3Async(item.Source, item.ReleaseDirectory, item.FileName, trackProgress, ct);
-                    downloaded++;
+                    if (error is null) downloaded++;
+                    else failures.Add(new RipFailure(item, error));
                 }
-                catch (YtDlpException ex)
-                {
-                    failures.Add(new RipFailure(item, ex.Message));
-                    completed++;
-                    continue;
-                }
+            }
+            finally
+            {
+                slots.Release();
+            }
+        }).ToList();
+        await Task.WhenAll(work);
 
-                // La portada no es imprescindible: si no se puede incrustar, el MP3 se queda tal cual.
-                if (_covers is not null)
-                {
-                    if (coverPath is null) releaseMissingCover = true;
-                    else
-                    {
-                        try { await _covers.EmbedAsync(mp3, coverPath, ct); }
-                        catch (Exception ex) when (ex is CoverArtException or IOException or UnauthorizedAccessException)
-                        {
-                            releaseMissingCover = true;
-                        }
-                    }
-                }
+        // Mismo orden que la lista, aunque hayan terminado en otro.
+        var order = items.Select((item, index) => (item, index)).ToDictionary(x => x.item, x => x.index);
+        var sortedFailures = failures.OrderBy(f => order[f.Item]).ToList();
+        var withoutCover = covers.Values.Where(c => c.Missing).Select(c => c.ReleaseName).ToList();
+        return new Pass(downloaded, sortedFailures, withoutCover);
+    }
 
-                completed++;
+    /// <summary>Baja una pista e incrusta la portada. Devuelve null si ha ido bien, o el motivo del fallo.</summary>
+    private async Task<string?> DownloadOneAsync(RipItem item, ReleaseCover cover, PassTracker tracker, CancellationToken ct)
+    {
+        tracker.Started(item);
+        try
+        {
+            var coverPath = await cover.GetPathAsync(ct);
+            var trackProgress = new Progress<YtDlpProgress>(p => tracker.Update(item, p.Percent));
+
+            string mp3;
+            try
+            {
+                mp3 = await _downloader.DownloadMp3Async(item.Source, item.ReleaseDirectory, item.FileName, trackProgress, ct);
+            }
+            catch (YtDlpException ex)
+            {
+                return ex.Message;
             }
 
-            if (releaseMissingCover) withoutCover.Add(first.ReleaseName);
-            if (coverPath is not null)
-                try { File.Delete(coverPath); } catch (IOException) { /* temp se vacía al cerrar la app */ }
+            // La portada no es imprescindible: si no se puede incrustar, el MP3 se queda tal cual.
+            if (_covers is not null)
+            {
+                if (coverPath is null) cover.Missing = true;
+                else
+                {
+                    try { await _covers.EmbedAsync(mp3, coverPath, ct); }
+                    catch (Exception ex) when (ex is CoverArtException or IOException or UnauthorizedAccessException)
+                    {
+                        cover.Missing = true;
+                    }
+                }
+            }
+            return null;
+        }
+        finally
+        {
+            tracker.Finished(item);
+            cover.TrackDone();
+        }
+    }
+
+    /// <summary>
+    /// Portada de un disco durante una pasada: se baja una sola vez, la primera pista que la necesita, y
+    /// se borra de temp cuando termina la última pista del disco.
+    /// </summary>
+    private sealed class ReleaseCover(RipService owner, RipItem first, int tracks)
+    {
+        private readonly object _gate = new();
+        private Task<string?>? _download;
+        private int _remaining = tracks;
+
+        public string ReleaseName { get; } = first.ReleaseName;
+
+        /// <summary>Alguna pista descargada se ha quedado sin portada.</summary>
+        public bool Missing { get; set; }
+
+        public Task<string?> GetPathAsync(CancellationToken ct)
+        {
+            lock (_gate)
+                return _download ??= owner.DownloadCoverAsync(first.Selection.Release.ReleaseId, first.CoverUrl, ct);
         }
 
-        return new Pass(downloaded, failures, withoutCover);
+        public void TrackDone()
+        {
+            if (Interlocked.Decrement(ref _remaining) != 0) return;
+            if (_download is { IsCompletedSuccessfully: true, Result: { } path })
+                try { File.Delete(path); } catch (IOException) { /* temp se vacía al cerrar la app */ }
+        }
+    }
+
+    /// <summary>Lleva la cuenta de una pasada (terminadas, en marcha y cuánto llevan) y la va informando.</summary>
+    private sealed class PassTracker(RipPhase phase, int total, IProgress<RipProgress>? progress)
+    {
+        private readonly object _gate = new();
+        private readonly List<(RipItem Item, double Fraction)> _active = [];
+        private int _completed;
+
+        public void Started(RipItem item)
+        {
+            lock (_gate) _active.Add((item, 0));
+            Report();
+        }
+
+        public void Update(RipItem item, double percent)
+        {
+            lock (_gate)
+            {
+                var i = _active.FindIndex(a => ReferenceEquals(a.Item, item));
+                if (i >= 0) _active[i] = (item, Math.Clamp(percent / 100.0, 0, 1));
+            }
+            Report();
+        }
+
+        public void Finished(RipItem item)
+        {
+            lock (_gate)
+            {
+                _active.RemoveAll(a => ReferenceEquals(a.Item, item));
+                _completed++;
+            }
+            Report();
+        }
+
+        private void Report()
+        {
+            if (progress is null) return;
+            RipProgress snapshot;
+            lock (_gate)
+            {
+                snapshot = new RipProgress(phase, _completed, total, string.Empty,
+                    _active.Select(a => a.Item.Selection.Track.Title).ToList(), _active.Sum(a => a.Fraction));
+            }
+            progress.Report(snapshot);
+        }
     }
 
     /// <summary>Baja la portada una vez por disco a la carpeta temporal; null si no hay o falla.</summary>

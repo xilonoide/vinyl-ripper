@@ -574,15 +574,20 @@ public sealed partial class MainViewModel : ObservableObject
                 new CoverArtEmbedder(ffmpeg, _services.Paths.TempDirectory),
                 _services.Releases);
 
+            // El tiempo estimado se cuenta por pasada: la de descarga y, aparte, cada una de reintento.
+            var eta = new RipEta();
+            RipPhase? lastPhase = null;
             var progress = new Progress<RipProgress>(p =>
             {
+                if (p.Phase != lastPhase) { eta.Restart(); lastPhase = p.Phase; }
                 BusyPercent = p.OverallPercent;
                 BusyText = p.Phase switch
                 {
                     RipPhase.Resolving => $"Buscando vídeos · {p.CurrentRelease}",
-                    RipPhase.Downloading => $"Descargando {p.CompletedTracks + 1}/{p.TotalTracks} · {p.CurrentRelease} · {p.CurrentTrack} ({p.CurrentTrackPercent:0}%)",
-                    RipPhase.Retrying when p.CurrentTrack is null => $"Reintentando {Plural(p.TotalTracks, "pista que ha fallado", "pistas que han fallado")}…",
-                    RipPhase.Retrying => $"Reintentando {p.CompletedTracks + 1}/{p.TotalTracks} · {p.CurrentRelease} · {p.CurrentTrack} ({p.CurrentTrackPercent:0}%)",
+                    RipPhase.Downloading => DownloadStatus("Descargando", p, eta),
+                    RipPhase.Retrying when p.CompletedTracks == 0 && p.ActiveTracks.Count == 0 =>
+                        $"Reintentando {Plural(p.TotalTracks, "pista que ha fallado", "pistas que han fallado")}…",
+                    RipPhase.Retrying => DownloadStatus("Reintentando", p, eta),
                     _ => "Terminando…",
                 };
             });
@@ -625,6 +630,15 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>"Descargando 12/956 · quedan ~48 min · Dogs · Sheep · Pigs".</summary>
+    private static string DownloadStatus(string verb, RipProgress p, RipEta eta)
+    {
+        var text = $"{verb} {p.CompletedTracks}/{p.TotalTracks}";
+        if (eta.Remaining(p.OverallPercent / 100) is { } remaining) text += " · " + RipEta.Format(remaining);
+        if (p.ActiveTracks.Count > 0) text += " · " + string.Join(" · ", p.ActiveTracks);
+        return text;
+    }
+
     private static string BuildDownloadSummary(string folder, int downloaded, int recovered,
         IReadOnlyList<RipFailure> failures, IReadOnlyList<string> withoutCover)
     {
@@ -643,8 +657,17 @@ public sealed partial class MainViewModel : ObservableObject
         return summary;
     }
 
+    /// <summary>Cancela la descarga, tras confirmarlo: pulsarlo sin querer en mitad de cientos de pistas duele.</summary>
     [RelayCommand]
-    private void CancelDownload() => _downloadCts?.Cancel();
+    private void CancelDownload()
+    {
+        if (_downloadCts is null) return;
+        var confirmed = AskAction?.Invoke("Cancelar la descarga",
+            "¿Seguro que quieres cancelar la descarga?\n\n" +
+            "Lo ya descargado se queda en la carpeta de salida. Para seguir descargando, cierra este aviso.",
+            MessageKind.Warning, "Cancelar descarga") == true;
+        if (confirmed) _downloadCts?.Cancel();
+    }
 
     // ------------------------------------------------------------------ herramientas
 
