@@ -164,7 +164,9 @@ public class RipServiceNamingTests
     {
         Assert.Equal("Sheep", RipService.BuildTrackFileName(new Track("A3", "Sheep", null, null)));
         Assert.Equal("Nirvana - Lithium", RipService.BuildTrackFileName(new Track("B1", "Lithium", "Nirvana", null)));
-        Assert.Equal("A1", RipService.BuildTrackFileName(new Track("A1", "???", null, null)));
+        Assert.Equal("AC_DC - T.N.T", RipService.BuildTrackFileName(new Track("B2", "T.N.T.", "AC/DC", null)));
+        // Un título que se queda vacío al sanear cae en la posición del disco.
+        Assert.Equal("A1", RipService.BuildTrackFileName(new Track("A1", "...", null, null)));
     }
 
     [Fact]
@@ -172,8 +174,9 @@ public class RipServiceNamingTests
     {
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         Assert.Equal("Intro", RipService.UniqueName("Intro", used));
-        Assert.Equal("Intro (2)", RipService.UniqueName("intro", used));
+        Assert.Equal("Intro (2)", RipService.UniqueName("Intro", used));
         Assert.Equal("Intro (3)", RipService.UniqueName("Intro", used));
+        Assert.Equal("intro (4)", RipService.UniqueName("intro", used)); // sin distinguir mayúsculas
         Assert.Equal("Outro", RipService.UniqueName("Outro", used));
     }
 }
