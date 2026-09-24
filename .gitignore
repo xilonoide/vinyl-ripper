@@ -36,3 +36,8 @@ Desktop.ini
 # Local settings (la app guarda la config real en Documentos/vinyl-ripper)
 settings.json
 *.local.json
+
+# Scripts locales de build/arranque
+publish.bat
+installer.bat
+run.bat
