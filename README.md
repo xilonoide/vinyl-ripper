@@ -71,8 +71,8 @@ Documentos/
     │   └── yt-dlp.exe                 ← si no lo tenías instalado
     └── 639012345678901234/            ← una carpeta por descarga (DateTime.Ticks, siempre creciente)
         └── Pink Floyd - Animals (1977)/
-            ├── 01 - Pigs On The Wing (Part One).mp3
-            ├── 02 - Dogs.mp3
+            ├── Pigs On The Wing (Part One).mp3
+            ├── Dogs.mp3
             └── …
 ```
 

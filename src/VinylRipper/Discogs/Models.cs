@@ -46,7 +46,7 @@ public sealed record ReleaseDetails(
 
 /// <summary>
 /// Una pista concreta de un disco, elegida para descargar. <paramref name="Index"/> es su posición
-/// (1..N) dentro del tracklist completo y <paramref name="TotalTracks"/> el total, para numerar archivos.
+/// (1..N) dentro del tracklist completo (identifica la pista y fija el orden de descarga).
 /// </summary>
 public sealed record TrackSelection(ReleaseSummary Release, Track Track, int Index, int TotalTracks)
 {

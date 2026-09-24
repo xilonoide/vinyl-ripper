@@ -160,9 +160,20 @@ public class RipServiceNamingTests
     }
 
     [Fact]
-    public void Track_file_name_is_zero_padded_and_includes_track_artist()
+    public void Track_file_name_is_title_with_optional_track_artist()
     {
-        Assert.Equal("03 - Sheep", RipService.BuildTrackFileName(3, 5, new Track("A3", "Sheep", null, null)));
-        Assert.Equal("007 - Nirvana - Lithium", RipService.BuildTrackFileName(7, 120, new Track("B1", "Lithium", "Nirvana", null)));
+        Assert.Equal("Sheep", RipService.BuildTrackFileName(new Track("A3", "Sheep", null, null)));
+        Assert.Equal("Nirvana - Lithium", RipService.BuildTrackFileName(new Track("B1", "Lithium", "Nirvana", null)));
+        Assert.Equal("A1", RipService.BuildTrackFileName(new Track("A1", "???", null, null)));
+    }
+
+    [Fact]
+    public void Duplicate_track_titles_get_a_numeric_suffix()
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Intro", RipService.UniqueName("Intro", used));
+        Assert.Equal("Intro (2)", RipService.UniqueName("intro", used));
+        Assert.Equal("Intro (3)", RipService.UniqueName("Intro", used));
+        Assert.Equal("Outro", RipService.UniqueName("Outro", used));
     }
 }

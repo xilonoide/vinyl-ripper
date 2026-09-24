@@ -27,7 +27,7 @@ public sealed record RipResult(string OutputFolder, int Downloaded, IReadOnlyLis
 /// <summary>
 /// Orquesta el ripeo de un conjunto de pistas: por cada disco implicado pide a Discogs los vídeos
 /// asociados, empareja cada pista con uno (o recurre a una búsqueda en YouTube) y la baja a MP3 en
-/// <c>&lt;salida&gt;/Artista - Título (Año)/NN - Pista.mp3</c>.
+/// <c>&lt;salida&gt;/Artista - Título (Año)/Pista.mp3</c>.
 /// </summary>
 public sealed class RipService
 {
@@ -67,11 +67,12 @@ public sealed class RipService
             catch (DiscogsException) { /* seguimos con búsqueda */ }
 
             var usedVideos = new HashSet<string>();
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var sel in group.OrderBy(t => t.Index))
             {
                 ct.ThrowIfCancellationRequested();
                 var track = sel.Track;
-                var fileName = BuildTrackFileName(sel.Index, sel.TotalTracks, track);
+                var fileName = UniqueName(BuildTrackFileName(track), usedNames);
                 var video = TrackMatcher.FindVideo(track, videos, usedVideos);
                 var source = video?.Uri ?? YtDlpDownloader.SearchUrl(TrackMatcher.BuildSearchQuery(release.Artist, track));
                 if (video is not null) usedVideos.Add(video.Uri);
@@ -106,11 +107,19 @@ public sealed class RipService
         return FileNameSanitizer.Sanitize(name, fallback: release.ReleaseId.ToString());
     }
 
-    internal static string BuildTrackFileName(int index, int total, Track track)
+    /// <summary>Nombre del MP3: el título de la pista (precedido del artista si es distinto al del disco).</summary>
+    internal static string BuildTrackFileName(Track track)
     {
-        var digits = Math.Max(2, total.ToString().Length);
-        var prefix = index.ToString().PadLeft(digits, '0');
         var title = track.Artist is { Length: > 0 } a ? $"{a} - {track.Title}" : track.Title;
-        return FileNameSanitizer.Sanitize($"{prefix} - {title}", fallback: prefix);
+        return FileNameSanitizer.Sanitize(title, fallback: string.IsNullOrEmpty(track.Position) ? "pista" : track.Position);
+    }
+
+    /// <summary>Evita que dos pistas con el mismo título dentro de un disco se pisen: "Intro", "Intro (2)"…</summary>
+    internal static string UniqueName(string name, ISet<string> used)
+    {
+        var candidate = name;
+        for (var n = 2; !used.Add(candidate); n++)
+            candidate = $"{name} ({n})";
+        return candidate;
     }
 }
