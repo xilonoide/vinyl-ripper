@@ -35,14 +35,18 @@ public sealed record Track(string Position, string Title, string? Artist, string
 
 public sealed record Video(string Uri, string Title, int? DurationSeconds);
 
-/// <summary>Detalle de un disco: tracklist y vídeos asociados en Discogs.</summary>
+/// <summary>
+/// Detalle de un disco: tracklist, vídeos asociados en Discogs y la URL de su portada a tamaño
+/// completo (la imagen <c>primary</c>, o la primera si no hay ninguna marcada como principal).
+/// </summary>
 public sealed record ReleaseDetails(
     long ReleaseId,
     string Artist,
     string Title,
     int? Year,
     IReadOnlyList<Track> Tracks,
-    IReadOnlyList<Video> Videos);
+    IReadOnlyList<Video> Videos,
+    string? CoverUrl = null);
 
 /// <summary>
 /// Una pista concreta de un disco, elegida para descargar. <paramref name="Index"/> es su posición

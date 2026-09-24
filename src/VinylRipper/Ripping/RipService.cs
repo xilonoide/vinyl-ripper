@@ -22,22 +22,27 @@ public sealed record RipProgress(
 
 public sealed record RipFailure(string Release, string Track, string Error);
 
-public sealed record RipResult(string OutputFolder, int Downloaded, IReadOnlyList<RipFailure> Failures);
+/// <param name="ReleasesWithoutCover">Discos con alguna pista descargada que se ha quedado sin portada.</param>
+public sealed record RipResult(string OutputFolder, int Downloaded, IReadOnlyList<RipFailure> Failures,
+    IReadOnlyList<string> ReleasesWithoutCover);
 
 /// <summary>
 /// Orquesta el ripeo de un conjunto de pistas: por cada disco implicado pide a Discogs los vídeos
 /// asociados, empareja cada pista con uno (o recurre a una búsqueda en YouTube) y la baja a MP3 en
-/// <c>&lt;salida&gt;/Artista - Título (Año)/Pista.mp3</c>.
+/// <c>&lt;salida&gt;/Artista - Título (Año)/Pista.mp3</c>. Si hay <see cref="CoverArtEmbedder"/>, a cada
+/// MP3 recién generado se le incrusta la portada del disco en Discogs (la misma en todas sus pistas).
 /// </summary>
 public sealed class RipService
 {
     private readonly DiscogsClient _discogs;
     private readonly YtDlpDownloader _downloader;
+    private readonly CoverArtEmbedder? _covers;
 
-    public RipService(DiscogsClient discogs, YtDlpDownloader downloader)
+    public RipService(DiscogsClient discogs, YtDlpDownloader downloader, CoverArtEmbedder? covers = null)
     {
         _discogs = discogs;
         _downloader = downloader;
+        _covers = covers;
     }
 
     /// <param name="outputFolder">Carpeta ya creada (normalmente <see cref="OutputFolders.CreateNext"/>).</param>
@@ -46,6 +51,7 @@ public sealed class RipService
     {
         Directory.CreateDirectory(outputFolder);
         var failures = new List<RipFailure>();
+        var withoutCover = new List<string>();
         var downloaded = 0;
         var completed = 0;
         var total = tracks.Count;
@@ -58,13 +64,20 @@ public sealed class RipService
             var releaseDir = Path.Combine(outputFolder, releaseName);
 
             // Los vídeos que Discogs asocia al disco son la mejor fuente; si falla, buscamos en YouTube.
+            // La misma respuesta trae la portada a tamaño completo; si no, vale la miniatura de la lista.
             IReadOnlyList<Video> videos = [];
+            string? coverUrl = release.Thumb;
             progress?.Report(new RipProgress(RipPhase.Resolving, completed, total, releaseName, null, 0));
             try
             {
-                videos = (await _discogs.GetReleaseAsync(release.ReleaseId, ct)).Videos;
+                var details = await _discogs.GetReleaseAsync(release.ReleaseId, ct);
+                videos = details.Videos;
+                coverUrl = details.CoverUrl ?? coverUrl;
             }
             catch (DiscogsException) { /* seguimos con búsqueda */ }
+
+            var coverPath = await DownloadCoverAsync(release.ReleaseId, coverUrl, ct);
+            var releaseMissingCover = false;
 
             var usedVideos = new HashSet<string>();
             var ordered = group.OrderBy(t => t.Index).ToList();
@@ -84,22 +97,58 @@ public sealed class RipService
                     progress?.Report(new RipProgress(RipPhase.Downloading, snapshot, total, releaseName, track.Title, p.Percent)));
                 progress?.Report(new RipProgress(RipPhase.Downloading, completed, total, releaseName, track.Title, 0));
 
+                string mp3;
                 try
                 {
-                    await _downloader.DownloadMp3Async(source, releaseDir, fileName, trackProgress, ct);
+                    mp3 = await _downloader.DownloadMp3Async(source, releaseDir, fileName, trackProgress, ct);
                     downloaded++;
                 }
                 catch (YtDlpException ex)
                 {
                     failures.Add(new RipFailure(releaseName, track.Title, ex.Message));
+                    completed++;
+                    continue;
+                }
+
+                // La portada no es imprescindible: si no se puede incrustar, el MP3 se queda tal cual.
+                if (_covers is not null)
+                {
+                    if (coverPath is null) releaseMissingCover = true;
+                    else
+                    {
+                        try { await _covers.EmbedAsync(mp3, coverPath, ct); }
+                        catch (Exception ex) when (ex is CoverArtException or IOException or UnauthorizedAccessException)
+                        {
+                            releaseMissingCover = true;
+                        }
+                    }
                 }
 
                 completed++;
             }
+
+            if (releaseMissingCover) withoutCover.Add(releaseName);
+            if (coverPath is not null)
+                try { File.Delete(coverPath); } catch (IOException) { /* temp se vacía al arrancar */ }
         }
 
         progress?.Report(new RipProgress(RipPhase.Done, completed, total, string.Empty, null, 100));
-        return new RipResult(outputFolder, downloaded, failures);
+        return new RipResult(outputFolder, downloaded, failures, withoutCover);
+    }
+
+    /// <summary>Baja la portada una vez por disco a la carpeta temporal; null si no hay o falla.</summary>
+    private async Task<string?> DownloadCoverAsync(long releaseId, string? url, CancellationToken ct)
+    {
+        if (_covers is null || string.IsNullOrWhiteSpace(url)) return null;
+        try
+        {
+            var image = await _discogs.DownloadImageAsync(url, ct);
+            return _covers.SaveCover(image, $"cover-{releaseId}");
+        }
+        catch (Exception ex) when (ex is DiscogsException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     internal static string BuildReleaseFolderName(ReleaseSummary release)

@@ -208,7 +208,64 @@ public sealed partial class DiscogsClient
             }
         }
 
-        return new ReleaseDetails(releaseId, artist, title, year, tracks, videos);
+        return new ReleaseDetails(releaseId, artist, title, year, tracks, videos, ParseCoverUrl(root));
+    }
+
+    /// <summary>URL de la portada: la imagen <c>primary</c> y, si no hay, la primera de la lista.</summary>
+    internal static string? ParseCoverUrl(JsonElement release)
+    {
+        if (!release.TryGetProperty("images", out var images) || images.ValueKind != JsonValueKind.Array)
+            return null;
+
+        string? first = null;
+        foreach (var img in images.EnumerateArray())
+        {
+            var uri = TryString(img, "uri");
+            if (string.IsNullOrWhiteSpace(uri)) uri = TryString(img, "resource_url");
+            if (string.IsNullOrWhiteSpace(uri)) continue;
+            if (string.Equals(TryString(img, "type"), "primary", StringComparison.OrdinalIgnoreCase)) return uri;
+            first ??= uri;
+        }
+        return first;
+    }
+
+    // ---------------------------------------------------------------- imágenes
+
+    /// <summary>
+    /// Descarga una imagen de Discogs (portada o miniatura). Las URLs de <c>i.discogs.com</c> ya van
+    /// firmadas, así que no se envía el token. Reintenta un par de veces si el CDN limita.
+    /// </summary>
+    public async Task<byte[]> DownloadImageAsync(string url, CancellationToken ct = default)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            throw new DiscogsException($"URL de imagen no válida: {url}");
+
+        for (var attempt = 1; ; attempt++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/jpeg"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/png", 0.9));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*", 0.5));
+
+            HttpResponseMessage response;
+            try { response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct); }
+            catch (HttpRequestException ex) { throw new DiscogsException("No se pudo descargar la portada: " + ex.Message, ex); }
+
+            using (response)
+            {
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt <= 3)
+                {
+                    await Task.Delay(response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2 * attempt), ct);
+                    continue;
+                }
+                if (!response.IsSuccessStatusCode)
+                    throw new DiscogsException($"La portada devolvió {(int)response.StatusCode} {response.ReasonPhrase}.") { StatusCode = (int)response.StatusCode };
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+                if (bytes.Length == 0) throw new DiscogsException("La portada está vacía.");
+                return bytes;
+            }
+        }
     }
 
     // ---------------------------------------------------------------- paginación / HTTP

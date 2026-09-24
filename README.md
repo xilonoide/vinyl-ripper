@@ -28,6 +28,7 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🎵 **Vídeos de Discogs primero** | Si la edición tiene vídeos de YouTube asociados en Discogs se usan esos; si no, se busca `artista + pista`. |
 | 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`; desde ⚙ se actualiza con un clic. |
 | 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) van a `Documentos/vinyl-ripper/temp`, que se vacía en cada arranque; en la carpeta del disco sólo aparecen MP3. |
+| 🖼 **Portada en cada MP3** | Tras generar cada MP3 se le incrusta la portada del disco en Discogs (la misma en todas sus pistas) como etiqueta **ID3v2.3**, con ffmpeg y sin recodificar el audio. Si un disco no tiene portada, el resumen final lo indica. |
 | 🏷 **Nombres limpios** | Cada MP3 se llama como la pista, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Anonim A1`, `Anonim A2`…). |
 | 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso por pista (el total se conoce desde el principio). |
 | 💾 **Todo se recuerda** | Lista elegida, filtro, discos seleccionados, tamaño y posición de ventana… se guardan a cada cambio. |
@@ -128,7 +129,7 @@ El script lee la versión del csproj, hace `dotnet publish` (win-x64, self-conta
 dotnet test
 ```
 
-Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (saneado, títulos repetidos por posición del vinilo), la limpieza de `temp` y las carpetas numeradas.
+Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (saneado, títulos repetidos por posición del vinilo), la limpieza de `temp`, las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
 
 ## 🏗️ Arquitectura
 
@@ -140,7 +141,7 @@ vinyl-ripper/
 │   │   ├── Security/           TokenProtector (AES-256-GCM + PBKDF2)
 │   │   ├── Discogs/            DiscogsClient · modelos
 │   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader · parser de progreso
-│   │   └── Ripping/            RipService · TrackMatcher · OutputFolders · FileNameSanitizer
+│   │   └── Ripping/            RipService · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
 │   └── VinylRipper.Windows/    🪟 WPF (net10.0-windows), MVVM con CommunityToolkit.Mvvm
 │       ├── Themes/Dark.xaml    Tema oscuro completo (TreeView, ListBox, ComboBox, ScrollBar, ProgressBar…)
 │       ├── Controls/           Spinner · DarkTitleBar · converters

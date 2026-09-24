@@ -495,7 +495,8 @@ public sealed partial class MainViewModel : ObservableObject
 
             var rip = new RipService(
                 new DiscogsClient(_http, token),
-                new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, _services.Settings.AudioQuality, _services.Paths.TempDirectory)));
+                new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, _services.Settings.AudioQuality, _services.Paths.TempDirectory)),
+                new CoverArtEmbedder(ffmpeg, _services.Paths.TempDirectory));
 
             var progress = new Progress<RipProgress>(p =>
             {
@@ -516,6 +517,12 @@ public sealed partial class MainViewModel : ObservableObject
                 summary += $"\n\n{result.Failures.Count} fallos:\n" +
                     string.Join("\n", result.Failures.Take(25).Select(f => $"• {f.Release} — {f.Track}: {f.Error}"));
                 if (result.Failures.Count > 25) summary += $"\n… y {result.Failures.Count - 25} más.";
+            }
+            if (result.ReleasesWithoutCover.Count > 0)
+            {
+                summary += "\n\nSin portada (Discogs no la tiene o no se pudo incrustar):\n" +
+                    string.Join("\n", result.ReleasesWithoutCover.Take(10).Select(r => $"• {r}"));
+                if (result.ReleasesWithoutCover.Count > 10) summary += $"\n… y {result.ReleasesWithoutCover.Count - 10} más.";
             }
             ShowMessage?.Invoke("Descarga terminada", summary, result.Failures.Count == 0 ? MessageKind.Success : MessageKind.Warning);
         }
