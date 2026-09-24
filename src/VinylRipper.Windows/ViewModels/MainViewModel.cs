@@ -67,6 +67,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     public Action<string, string, MessageKind>? ShowMessage { get; set; }
 
+    /// <summary>Aviso con un botón de acción (título, mensaje, tipo, texto del botón); true si se pulsa.</summary>
+    public Func<string, string, MessageKind, string, bool>? AskAction { get; set; }
+
     // ------------------------------------------------------------------ estado
 
     /// <summary>Nivel 1: árbol Colección/carpetas, Deseados, Inventario, Listas.</summary>
@@ -380,39 +383,87 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanAct() => !IsBusy;
 
-    /// <summary>Añade todas las pistas de los discos marcados (descarga el tracklist si hace falta).</summary>
+    /// <summary>Pausa antes de reintentar los discos o pistas que han fallado: un error de Discogs o YouTube suele ser pasajero.</summary>
+    private static readonly TimeSpan RetryPause = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Añade todas las pistas de los discos marcados (lee su tracklist si hace falta). Un disco que falla
+    /// no interrumpe a los demás: al final se reintentan una vez y, si alguno sigue fallando, se avisa de
+    /// todos a la vez, con un botón para volver a intentarlo.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanAct))]
     private async Task AddReleasesAsync(IList? items)
     {
         if (items is null) return;
         var complete = ReleasesFullySelected();
-        var releases = items.OfType<ReleaseSummary>().Where(r => !complete.Contains(r.ReleaseId)).ToList();
-        if (releases.Count == 0) return;
+        var pending = items.OfType<ReleaseSummary>().Where(r => !complete.Contains(r.ReleaseId)).ToList();
 
-        IsBusy = true; BusyPercent = releases.Count > 1 ? 0 : null;
-        try
+        while (pending.Count > 0)
         {
-            for (var i = 0; i < releases.Count; i++)
+            List<(ReleaseSummary Release, string Error)> failed;
+            IsBusy = true;
+            try
             {
-                var r = releases[i];
-                BusyText = $"Leyendo pistas {i + 1}/{releases.Count} · {r.DisplayName}";
-                BusyPercent = releases.Count > 1 ? 100.0 * i / releases.Count : null;
-                try
+                failed = await ReadReleasesAsync(pending, "Leyendo pistas");
+                if (failed.Count > 0)
                 {
-                    var details = await GetDetailsAsync(r.ReleaseId, CancellationToken.None);
-                    AddUnique(ToSelections(r, details));
-                }
-                catch (DiscogsException ex)
-                {
-                    ShowMessage?.Invoke("Discogs", $"{r.DisplayName}: {ex.Message}", MessageKind.Error);
+                    BusyText = $"Reintentando {Plural(failed.Count, "disco que ha fallado", "discos que han fallado")}…";
+                    BusyPercent = null;
+                    await Task.Delay(RetryPause);
+                    failed = await ReadReleasesAsync(failed.Select(f => f.Release).ToList(), "Reintentando");
                 }
             }
-        }
-        finally
-        {
-            IsBusy = false; BusyText = null; BusyPercent = null;
+            finally
+            {
+                IsBusy = false; BusyText = null; BusyPercent = null;
+            }
+
+            if (failed.Count == 0) return;
+            var message = $"No se han podido leer las pistas de {Plural(failed.Count, "disco", "discos")}, ni al reintentarlo:\n\n" +
+                          FormatFailures(failed.Select(f => (f.Release.DisplayName, f.Error)).ToList()) +
+                          "\n\nPuedes reintentarlo ahora o, más tarde, volver a marcarlos y pulsar «Añadir discos completos».";
+            if (AskAction?.Invoke("Discogs", message, MessageKind.Warning, "Reintentar") != true) return;
+            pending = failed.Select(f => f.Release).ToList();
         }
     }
+
+    /// <summary>Lee el tracklist de cada disco y añade sus pistas; devuelve los que han fallado, sin avisar.</summary>
+    private async Task<List<(ReleaseSummary Release, string Error)>> ReadReleasesAsync(IReadOnlyList<ReleaseSummary> releases, string verb)
+    {
+        var failed = new List<(ReleaseSummary, string)>();
+        for (var i = 0; i < releases.Count; i++)
+        {
+            var r = releases[i];
+            BusyText = $"{verb} {i + 1}/{releases.Count} · {r.DisplayName}";
+            BusyPercent = releases.Count > 1 ? 100.0 * i / releases.Count : null;
+            try
+            {
+                var details = await GetDetailsAsync(r.ReleaseId, CancellationToken.None);
+                AddUnique(ToSelections(r, details));
+            }
+            catch (DiscogsException ex)
+            {
+                failed.Add((r, ex.Message));
+            }
+        }
+        return failed;
+    }
+
+    /// <summary>
+    /// Lista de fallos para un aviso: "• qué" por línea y, si todos comparten motivo, el motivo una sola
+    /// vez al final (si no, cada uno en su línea). Como mucho <paramref name="max"/> líneas.
+    /// </summary>
+    private static string FormatFailures(IReadOnlyList<(string What, string Error)> failures, int max = 25)
+    {
+        var sameError = failures.Select(f => f.Error).Distinct().Count() == 1;
+        var lines = failures.Take(max).Select(f => sameError ? $"• {f.What}" : $"• {f.What}: {f.Error}");
+        var text = string.Join("\n", lines);
+        if (failures.Count > max) text += $"\n… y {failures.Count - max} más.";
+        if (sameError) text += $"\n\nMotivo: {failures[0].Error}";
+        return text;
+    }
+
+    private static string Plural(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";
 
     [RelayCommand(CanExecute = nameof(CanAct))]
     private void AddTracks(IList? items)
@@ -530,26 +581,33 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     RipPhase.Resolving => $"Buscando vídeos · {p.CurrentRelease}",
                     RipPhase.Downloading => $"Descargando {p.CompletedTracks + 1}/{p.TotalTracks} · {p.CurrentRelease} · {p.CurrentTrack} ({p.CurrentTrackPercent:0}%)",
+                    RipPhase.Retrying when p.CurrentTrack is null => $"Reintentando {Plural(p.TotalTracks, "pista que ha fallado", "pistas que han fallado")}…",
+                    RipPhase.Retrying => $"Reintentando {p.CompletedTracks + 1}/{p.TotalTracks} · {p.CurrentRelease} · {p.CurrentTrack} ({p.CurrentTrackPercent:0}%)",
                     _ => "Terminando…",
                 };
             });
 
+            // Las pistas que fallan no interrumpen: RipService las reintenta una vez al final. Si aún
+            // quedan, se avisa de todas juntas y se ofrece reintentarlas tantas veces como se quiera.
             var result = await rip.RipAsync(Selected.ToList(), folder, progress, cts.Token);
+            var downloaded = result.Downloaded;
+            var recovered = result.RecoveredOnRetry;
+            var withoutCover = result.ReleasesWithoutCover.ToList();
+            while (true)
+            {
+                var summary = BuildDownloadSummary(folder, downloaded, recovered, result.Failures, withoutCover);
+                if (result.Failures.Count == 0)
+                {
+                    ShowMessage?.Invoke("Descarga terminada", summary, MessageKind.Success);
+                    break;
+                }
+                if (AskAction?.Invoke("Descarga terminada", summary, MessageKind.Warning, "Reintentar") != true) break;
 
-            var summary = $"{result.Downloaded} pistas descargadas en\n{result.OutputFolder}";
-            if (result.Failures.Count > 0)
-            {
-                summary += $"\n\n{result.Failures.Count} fallos:\n" +
-                    string.Join("\n", result.Failures.Take(25).Select(f => $"• {f.Release} — {f.Track}: {f.Error}"));
-                if (result.Failures.Count > 25) summary += $"\n… y {result.Failures.Count - 25} más.";
+                result = await rip.RetryAsync(result.Failures, folder, progress, cts.Token);
+                downloaded += result.Downloaded;
+                recovered += result.RecoveredOnRetry;
+                withoutCover = withoutCover.Union(result.ReleasesWithoutCover).ToList();
             }
-            if (result.ReleasesWithoutCover.Count > 0)
-            {
-                summary += "\n\nSin portada (Discogs no la tiene o no se pudo incrustar):\n" +
-                    string.Join("\n", result.ReleasesWithoutCover.Take(10).Select(r => $"• {r}"));
-                if (result.ReleasesWithoutCover.Count > 10) summary += $"\n… y {result.ReleasesWithoutCover.Count - 10} más.";
-            }
-            ShowMessage?.Invoke("Descarga terminada", summary, result.Failures.Count == 0 ? MessageKind.Success : MessageKind.Warning);
         }
         catch (OperationCanceledException)
         {
@@ -565,6 +623,24 @@ public sealed partial class MainViewModel : ObservableObject
             _downloadCts = null;
             cts.Dispose();
         }
+    }
+
+    private static string BuildDownloadSummary(string folder, int downloaded, int recovered,
+        IReadOnlyList<RipFailure> failures, IReadOnlyList<string> withoutCover)
+    {
+        var summary = $"{Plural(downloaded, "pista descargada", "pistas descargadas")} en\n{folder}";
+        if (recovered > 0)
+            summary += $"\n\n{Plural(recovered, "falló a la primera y salió bien", "fallaron a la primera y salieron bien")} al reintentarlo.";
+        if (failures.Count > 0)
+            summary += $"\n\n{Plural(failures.Count, "pista sigue fallando", "pistas siguen fallando")} tras reintentarlo:\n" +
+                       FormatFailures(failures.Select(f => ($"{f.Release} — {f.Track}", f.Error)).ToList());
+        if (withoutCover.Count > 0)
+        {
+            summary += "\n\nSin portada (Discogs no la tiene o no se pudo incrustar):\n" +
+                       string.Join("\n", withoutCover.Take(10).Select(r => $"• {r}"));
+            if (withoutCover.Count > 10) summary += $"\n… y {withoutCover.Count - 10} más.";
+        }
+        return summary;
     }
 
     [RelayCommand]

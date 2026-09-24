@@ -7,7 +7,11 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         MinWidth="360" MaxWidth="680">
-    <Grid Margin="20" MaxHeight="520">
+    <Grid Margin="20" MaxHeight="560">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
@@ -16,5 +20,9 @@
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
             <TextBlock x:Name="MessageText" TextWrapping="Wrap" TextTrimming="None" FontSize="13" LineHeight="20" />
         </ScrollViewer>
+        <!-- Sólo con ShowWithAction: una acción (p. ej. "Reintentar"). Para no hacerla, se cierra con la X. -->
+        <Button x:Name="ActionButton" Grid.Row="1" Grid.Column="1" Style="{StaticResource AccentButton}"
+                HorizontalAlignment="Right" Margin="0,16,0,0" MinWidth="120" Visibility="Collapsed"
+                Click="ActionButton_Click" />
     </Grid>
 </Window>

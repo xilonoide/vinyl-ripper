@@ -18,7 +18,7 @@ public sealed class YtDlpException : Exception
 /// búsqueda): a MP3 para la descarga, o a m4a para escucharlo en la app. Reporta progreso por
 /// porcentaje y devuelve la ruta del archivo generado.
 /// </summary>
-public sealed class YtDlpDownloader
+public sealed class YtDlpDownloader : IAudioDownloader
 {
     private readonly YtDlpOptions _options;
 

@@ -28,7 +28,8 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🎧 **Escuchar antes de bajar** | Cada pista (en *Pistas* y en *Seleccionados*) tiene un ▶ que pasa a ■ mientras suena. Un spinner indica que se está preparando (unos segundos la primera vez). Abajo aparece una barra de progreso: pincha o arrastra para saltar a cualquier punto. Suena exactamente lo que se descargaría. |
 | 🎵 **Vídeos de Discogs primero** | Si la edición tiene vídeos de YouTube asociados en Discogs se usan esos; si no, se busca `artista + pista`. |
 | 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`; desde ⚙ se actualiza con un clic. |
-| 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) van a `Documentos/vinyl-ripper/temp`, que se vacía en cada arranque; en la carpeta del disco sólo aparecen MP3. |
+| 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) y las pistas escuchadas van a `Documentos/vinyl-ripper/temp`, que se vacía al abrir y al cerrar la app, incluso si se cierra de golpe (un pequeño vigilante espera a que termine y limpia). En la carpeta del disco sólo aparecen MP3. |
+| 🔁 **Reintentos** | Un fallo de Discogs o YouTube (un error 500, un corte) no para nada. Discogs se reintenta solo. Las pistas o discos que fallen se reintentan una vez al final. Lo que siga fallando se avisa todo junto, en un solo mensaje, con un botón **Reintentar**. |
 | 🖼 **Portada en cada MP3** | Tras generar cada MP3 se le incrusta la portada del disco en Discogs (la misma en todas sus pistas) como etiqueta **ID3v2.3**, con ffmpeg y sin recodificar el audio. Si un disco no tiene portada, el resumen final lo indica. |
 | 🏷 **Nombres limpios** | Cada MP3 se llama `Artista - Canción`, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Artista - Anonim A1`, `Artista - Anonim A2`…). |
 | ⚡ **Discogs sólo una vez** | El detalle de cada disco (tracklist, vídeos y portada) se guarda en `Documentos/vinyl-ripper/cache` y no se vuelve a pedir a la API, ni en siguientes arranques. Añadir un disco que ya está entero en *Seleccionados* ni siquiera lo consulta. Si algún disco cambia en Discogs, **Vaciar caché** en ⚙ hace que se vuelva a pedir. |
@@ -78,7 +79,7 @@ Documentos/
     │   └── yt-dlp.exe                 ← si no lo tenías instalado
     ├── cache/
     │   └── releases/                  ← detalle de cada disco ya consultado en Discogs (un .json por disco; se vacía desde ⚙)
-    ├── temp/                          ← intermedios de yt-dlp y pistas escuchadas (previews/); se vacía al arrancar
+    ├── temp/                          ← intermedios de yt-dlp y pistas escuchadas (previews/); se vacía al abrir y al cerrar, aunque sea de golpe
     └── 639012345678901234/            ← una carpeta por descarga (DateTime.Ticks, siempre creciente)
         └── Pink Floyd - Animals (1977)/
             ├── Pink Floyd - Pigs On The Wing (Part One).mp3
@@ -141,7 +142,7 @@ pwsh assets/make-splash.ps1
 dotnet test
 ```
 
-Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto, reintento si el antivirus lo tiene abierto), la caché de discos (sobrevive a reinicios, una sola llamada aunque se pida a la vez, reintento tras un fallo, archivos rotos o de otra versión), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (`Artista - Canción`, recopilatorios, saneado, títulos repetidos por posición del vinilo), la escucha previa (argumentos de yt-dlp en m4a, caché de pistas escuchadas, formato de tiempos), la limpieza de `temp`, las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
+Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto, reintento si el antivirus lo tiene abierto), la caché de discos (sobrevive a reinicios, una sola llamada aunque se pida a la vez, reintento tras un fallo, archivos rotos o de otra versión), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429 y en errores 5xx, parseo de tracklists), el ripeo con un descargador falso (reintento automático al final, fallos que se devuelven juntos y se pueden reintentar, nombres que no cambian al reintentar), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (`Artista - Canción`, recopilatorios, saneado, títulos repetidos por posición del vinilo), la escucha previa (argumentos de yt-dlp en m4a, caché de pistas escuchadas, formato de tiempos), la limpieza de `temp` y su vigilante (espera al proceso, PID reutilizado), las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
 
 ## 🏗️ Arquitectura
 
@@ -149,13 +150,14 @@ Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de 
 vinyl-ripper/
 ├── src/
 │   ├── VinylRipper/            🧠 Core multiplataforma (net10.0, sin dependencias de UI)
-│   │   ├── Configuration/      AppPaths · AppSettings · SettingsStore
+│   │   ├── Configuration/      AppPaths · AppSettings · SettingsStore · TempJanitor (vacía temp al terminar la app)
 │   │   ├── Security/           TokenProtector (AES-256-GCM + PBKDF2)
 │   │   ├── Discogs/            DiscogsClient · ReleaseDetailsCache · modelos
 │   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader · parser de progreso
 │   │   ├── Ripping/            RipService · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
 │   │   └── Preview/            TrackPreviewService (pista en m4a para escucharla) · PreviewTime
 │   └── VinylRipper.Windows/    🪟 WPF (net10.0-windows), MVVM con CommunityToolkit.Mvvm
+│       ├── Program.cs          Main propio: arranca la app o, con un argumento, sólo el vigilante de temp
 │       ├── Themes/Dark.xaml    Tema oscuro completo (TreeView, ListBox, ComboBox, ScrollBar, ProgressBar…)
 │       ├── Controls/           Spinner · DarkTitleBar · converters
 │       ├── Dialogs/            DarkMessageBox · SettingsWindow

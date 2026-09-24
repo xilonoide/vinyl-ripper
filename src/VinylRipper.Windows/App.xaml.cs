@@ -16,6 +16,7 @@ public partial class App : Application
 
     private readonly SplashScreen _splash;
     private readonly Stopwatch _splashClock;
+    private AppPaths? _paths;
 
     public App()
     {
@@ -34,9 +35,10 @@ public partial class App : Application
         TaskScheduler.UnobservedTaskException += (_, args) => args.SetObserved();
 
         // Composición manual: la app es pequeña y así queda claro qué depende de qué.
-        var paths = AppPaths.Default();
+        var paths = _paths = AppPaths.Default();
         paths.EnsureCreated();
-        paths.ClearTemp(); // restos de yt-dlp de una descarga cancelada o de un cierre brusco
+        paths.ClearTemp(); // por si el vigilante no pudo (p. ej. se apagó el equipo)
+        StartTempJanitor();
         var services = new AppServices(
             paths,
             new SettingsStore(paths),
@@ -61,6 +63,40 @@ public partial class App : Application
         window.ContentRendered += (_, _) => _splash.Close(TimeSpan.FromMilliseconds(300));
         window.Show();
         window.Activate();
+    }
+
+    /// <summary>
+    /// Lanza el vigilante (<see cref="TempJanitor"/>): otra copia de este exe, sin ventana, que vacía temp
+    /// cuando esta termine, aunque sea por un fallo o matándola. Si no se puede lanzar, temp se vacía
+    /// igualmente al cerrar normal (<see cref="OnExit"/>) o en el siguiente arranque.
+    /// </summary>
+    private static void StartTempJanitor()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe is null) return;
+            using var self = Process.GetCurrentProcess();
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
+            // Lanzada como "dotnet VinylRipper.Windows.dll": hay que repetir la dll.
+            if (System.IO.Path.GetFileNameWithoutExtension(exe).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                psi.ArgumentList.Add(typeof(App).Assembly.Location);
+            foreach (var arg in TempJanitor.BuildArguments(self.Id, self.StartTime))
+                psi.ArgumentList.Add(arg);
+            Process.Start(psi)?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+    }
+
+    /// <summary>
+    /// Al cerrar, vacía temp ya mismo: intermedios de yt-dlp y las pistas escuchadas (unos MB cada una).
+    /// La ventana ya ha parado la escucha al cerrarse, así que el m4a que sonaba está libre. El vigilante
+    /// hace lo mismo al ver que el proceso termina; aquí sólo se adelanta.
+    /// </summary>
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _paths?.ClearTemp();
+        base.OnExit(e);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

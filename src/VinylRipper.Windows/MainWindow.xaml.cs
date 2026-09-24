@@ -28,6 +28,7 @@ public partial class MainWindow : Window
         DataContext = vm;
 
         vm.ShowMessage = (title, message, kind) => DarkMessageBox.Show(this, title, message, kind);
+        vm.AskAction = (title, message, kind, action) => DarkMessageBox.ShowWithAction(this, title, message, kind, action);
         vm.RequestSettings = OpenSettingsDialog;
 
         RestorePlacement(services.Settings.Window);

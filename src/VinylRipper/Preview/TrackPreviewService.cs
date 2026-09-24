@@ -7,7 +7,7 @@ namespace VinylRipper.Preview;
 /// <summary>
 /// Prepara una pista para escucharla en la app: la baja a m4a en <c>temp/previews</c> (la misma fuente
 /// que usaría la descarga a MP3) y devuelve la ruta. Si ya se escuchó en esta sesión, reutiliza el
-/// archivo sin volver a lanzar yt-dlp. La carpeta temp se vacía al arrancar la app.
+/// archivo sin volver a lanzar yt-dlp. La carpeta temp se vacía al abrir y al cerrar la app.
 /// </summary>
 public sealed class TrackPreviewService(YtDlpDownloader downloader, string previewsDirectory)
 {

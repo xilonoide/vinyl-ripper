@@ -92,7 +92,7 @@ public sealed class CoverArtEmbedder(string ffmpegPath, string tempDirectory)
         }
         finally
         {
-            try { if (File.Exists(tempOutput)) File.Delete(tempOutput); } catch (IOException) { /* se limpia al arrancar */ }
+            try { if (File.Exists(tempOutput)) File.Delete(tempOutput); } catch (IOException) { /* temp se vacía al cerrar la app */ }
         }
     }
 

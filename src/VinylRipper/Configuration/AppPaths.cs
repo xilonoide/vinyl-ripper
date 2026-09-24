@@ -29,7 +29,7 @@ public sealed class AppPaths
     /// <summary>Carpeta donde se descargan herramientas externas (yt-dlp).</summary>
     public string ToolsDirectory => Path.Combine(Root, "tools");
 
-    /// <summary>Intermedios de yt-dlp (.webm, .part, .ytdl…). Se vacía en cada arranque.</summary>
+    /// <summary>Intermedios de yt-dlp (.webm, .part, .ytdl…) y pistas escuchadas. Se vacía al abrir y al cerrar la app.</summary>
     public string TempDirectory => Path.Combine(Root, "temp");
 
     /// <summary>Detalle de discos ya pedidos a Discogs, para no volver a pedirlos. No se vacía.</summary>
@@ -44,7 +44,7 @@ public sealed class AppPaths
 
     /// <summary>
     /// Borra el contenido de <see cref="TempDirectory"/>. Un archivo bloqueado (otra instancia
-    /// descargando) no debe impedir arrancar: se ignora y se limpiará la próxima vez.
+    /// descargando) no debe impedir abrir ni cerrar la app: se ignora y se limpiará la próxima vez.
     /// </summary>
     /// <returns>Número de entradas eliminadas.</returns>
     public int ClearTemp()

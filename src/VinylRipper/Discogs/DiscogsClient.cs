@@ -22,6 +22,16 @@ public sealed partial class DiscogsClient
     private readonly string _token;
     private DiscogsIdentity? _identity;
 
+    /// <summary>Reintentos ante un error del servidor (500, 502, 503, 504), que en Discogs suele ser pasajero.</summary>
+    internal const int ServerErrorRetries = 3;
+
+    /// <summary>Pausa antes del reintento n-ésimo tras un error del servidor: n × este valor.</summary>
+    internal TimeSpan ServerErrorDelay { get; init; } = TimeSpan.FromSeconds(1.5);
+
+    internal static bool IsServerError(HttpStatusCode status) =>
+        status is HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
+
     public DiscogsClient(HttpClient http, string token)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
@@ -258,6 +268,11 @@ public sealed partial class DiscogsClient
                     await Task.Delay(response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2 * attempt), ct);
                     continue;
                 }
+                if (IsServerError(response.StatusCode) && attempt <= ServerErrorRetries)
+                {
+                    await Task.Delay(ServerErrorDelay * attempt, ct);
+                    continue;
+                }
                 if (!response.IsSuccessStatusCode)
                     throw new DiscogsException($"La portada devolvió {(int)response.StatusCode} {response.ReasonPhrase}.") { StatusCode = (int)response.StatusCode };
 
@@ -318,6 +333,12 @@ public sealed partial class DiscogsClient
                     continue;
                 }
 
+                if (IsServerError(response.StatusCode) && attempt <= ServerErrorRetries)
+                {
+                    await Task.Delay(ServerErrorDelay * attempt, ct);
+                    continue;
+                }
+
                 if (!response.IsSuccessStatusCode)
                 {
                     var msg = response.StatusCode switch
@@ -326,6 +347,7 @@ public sealed partial class DiscogsClient
                         HttpStatusCode.Forbidden => "Discogs ha denegado el acceso (¿token sin permisos?).",
                         HttpStatusCode.NotFound => "Recurso no encontrado en Discogs.",
                         HttpStatusCode.TooManyRequests => "Discogs ha limitado las peticiones; espera un minuto e inténtalo de nuevo.",
+                        var s when IsServerError(s) => $"Discogs está fallando ahora mismo (error {(int)s}), incluso tras reintentarlo.",
                         _ => $"Discogs devolvió {(int)response.StatusCode} {response.ReasonPhrase}.",
                     };
                     throw new DiscogsException(msg) { StatusCode = (int)response.StatusCode };
