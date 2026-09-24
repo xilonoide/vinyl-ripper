@@ -65,6 +65,19 @@
             </TextBlock.Style>
         </TextBlock>
 
+        <TextBlock Style="{StaticResource FieldLabel}">Caché de discos</TextBlock>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="{Binding ReleaseCacheText}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Margin="10,0,0,0" Content="Vaciar caché" Command="{Binding ClearReleaseCacheCommand}" />
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}">
+            Pistas, vídeos y portada de cada disco ya consultado, para no volver a pedírselos a Discogs. Vacíala si algún disco ha cambiado allí: se volverá a pedir la próxima vez que haga falta.
+        </TextBlock>
+
         <!-- Salida -->
         <TextBlock Style="{StaticResource Heading}" Margin="0,20,0,0">Salida</TextBlock>
         <TextBlock Style="{StaticResource FieldLabel}" Margin="0,4,0,4">Carpeta raíz de descargas</TextBlock>
@@ -77,7 +90,7 @@
             <Button Grid.Column="1" Margin="10,0,0,0" Content="Elegir…" Click="BrowseOutput_Click" />
         </Grid>
         <TextBlock Style="{StaticResource Hint}">
-            <Run>Vacío = </Run><Run Text="{Binding DefaultOutputRoot, Mode=OneWay}" /><Run>. Cada descarga crea dentro una subcarpeta numerada.</Run>
+            <Run Text="Vacío = " /><Run Text="{Binding DefaultOutputRoot, Mode=OneWay}" /><Run>. Cada descarga crea dentro una subcarpeta numerada.</Run>
         </TextBlock>
 
         <TextBlock Style="{StaticResource FieldLabel}">Calidad MP3</TextBlock>
@@ -97,7 +110,7 @@
             <Button Grid.Column="2" Margin="10,0,0,0" Content="Descargar / actualizar" Command="{Binding InstallYtDlpCommand}" />
         </Grid>
         <TextBlock Style="{StaticResource Hint}">
-            <Run>Vacío = autodetectar. Ahora mismo: </Run><Run Text="{Binding DetectedYtDlp, Mode=OneWay, TargetNullValue='no encontrado (se descargará solo al primer uso)'}" />
+            <Run Text="Vacío = autodetectar. Ahora mismo: " /><Run Text="{Binding DetectedYtDlp, Mode=OneWay, TargetNullValue='no encontrado (se descargará solo al primer uso)'}" />
         </TextBlock>
 
         <TextBlock Style="{StaticResource FieldLabel}">ffmpeg</TextBlock>
@@ -110,7 +123,7 @@
             <Button Grid.Column="1" Margin="10,0,0,0" Content="Elegir…" Click="BrowseFfmpeg_Click" />
         </Grid>
         <TextBlock Style="{StaticResource Hint}">
-            <Run>Necesario para convertir a MP3. Vacío = buscar en PATH. Ahora mismo: </Run><Run Text="{Binding DetectedFfmpeg, Mode=OneWay, TargetNullValue='no encontrado — instala con: winget install Gyan.FFmpeg'}" />
+            <Run Text="Necesario para convertir el audio. Vacío = buscar en PATH. Ahora mismo: " /><Run Text="{Binding DetectedFfmpeg, Mode=OneWay, TargetNullValue='no encontrado — instala con: winget install Gyan.FFmpeg'}" />
         </TextBlock>
 
         <!-- Ocupado -->

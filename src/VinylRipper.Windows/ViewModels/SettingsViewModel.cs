@@ -29,6 +29,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _audioQuality = AudioQualities.FirstOrDefault(q => q.Value == s.AudioQuality) ?? AudioQualities[0];
 
         RefreshDetected();
+        RefreshReleaseCache();
     }
 
     public static IReadOnlyList<AudioQualityOption> AudioQualities { get; } =
@@ -61,6 +62,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double? _busyPercent;
     [ObservableProperty] private string? _tokenStatus;
     [ObservableProperty] private bool _tokenStatusIsError;
+
+    /// <summary>"267 discos guardados", "Vacía" o, justo después de vaciarla, cuántos se han borrado.</summary>
+    [ObservableProperty] private string _releaseCacheText = string.Empty;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ClearReleaseCacheCommand))]
+    private int _releaseCacheCount;
 
     partial void OnDiscogsTokenChanged(string value)
     {
@@ -101,6 +108,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         DetectedYtDlp = _services.Locator.FindYtDlp(_services.Settings.YtDlpPath);
         DetectedFfmpeg = _services.Locator.FindFfmpeg(_services.Settings.FfmpegPath);
+    }
+
+    private void RefreshReleaseCache()
+    {
+        ReleaseCacheCount = _services.Releases.Count;
+        ReleaseCacheText = ReleaseCacheCount switch
+        {
+            0 => "Vacía",
+            1 => "1 disco guardado",
+            var n => $"{n} discos guardados",
+        };
+    }
+
+    private bool CanClearReleaseCache() => ReleaseCacheCount > 0;
+
+    /// <summary>Borra la caché de discos: la próxima vez que se necesite cada uno se pedirá de nuevo a Discogs.</summary>
+    [RelayCommand(CanExecute = nameof(CanClearReleaseCache))]
+    private void ClearReleaseCache()
+    {
+        var removed = _services.Releases.Clear();
+        RefreshReleaseCache();
+        ReleaseCacheText = removed == 1 ? "✔ Vaciada (1 disco)" : $"✔ Vaciada ({removed} discos)";
     }
 
     [RelayCommand]

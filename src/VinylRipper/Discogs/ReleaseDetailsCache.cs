@@ -61,6 +61,46 @@ public sealed class ReleaseDetailsCache
         }
     }
 
+    /// <summary>Discos guardados en disco.</summary>
+    public int Count
+    {
+        get
+        {
+            try { return System.IO.Directory.Exists(Directory) ? System.IO.Directory.EnumerateFiles(Directory, "*.json").Count() : 0; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
+        }
+    }
+
+    /// <summary>
+    /// Olvida todo lo guardado (en memoria y en disco), para que cada disco se vuelva a pedir a Discogs
+    /// la próxima vez: útil si alguno ha cambiado allí. Un archivo bloqueado se deja; se sobrescribirá.
+    /// </summary>
+    /// <returns>Discos borrados del disco.</returns>
+    public int Clear()
+    {
+        _memory.Clear();
+
+        List<string> files;
+        try
+        {
+            if (!System.IO.Directory.Exists(Directory)) return 0;
+            files = System.IO.Directory.EnumerateFiles(Directory).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
+
+        var removed = 0;
+        foreach (var file in files)
+        {
+            try
+            {
+                File.Delete(file);
+                if (file.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) removed++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return removed;
+    }
+
     /// <summary>
     /// El detalle del disco: de la caché si está y, si no, de <paramref name="fetch"/> (la API), que se
     /// guarda. Varias peticiones simultáneas del mismo disco comparten una sola llamada.

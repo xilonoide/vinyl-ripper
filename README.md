@@ -31,7 +31,7 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) van a `Documentos/vinyl-ripper/temp`, que se vacía en cada arranque; en la carpeta del disco sólo aparecen MP3. |
 | 🖼 **Portada en cada MP3** | Tras generar cada MP3 se le incrusta la portada del disco en Discogs (la misma en todas sus pistas) como etiqueta **ID3v2.3**, con ffmpeg y sin recodificar el audio. Si un disco no tiene portada, el resumen final lo indica. |
 | 🏷 **Nombres limpios** | Cada MP3 se llama `Artista - Canción`, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Artista - Anonim A1`, `Artista - Anonim A2`…). |
-| ⚡ **Discogs sólo una vez** | El detalle de cada disco (tracklist, vídeos y portada) se guarda en `Documentos/vinyl-ripper/cache` y no se vuelve a pedir a la API, ni en siguientes arranques. Añadir un disco que ya está entero en *Seleccionados* ni siquiera lo consulta. |
+| ⚡ **Discogs sólo una vez** | El detalle de cada disco (tracklist, vídeos y portada) se guarda en `Documentos/vinyl-ripper/cache` y no se vuelve a pedir a la API, ni en siguientes arranques. Añadir un disco que ya está entero en *Seleccionados* ni siquiera lo consulta. Si algún disco cambia en Discogs, **Vaciar caché** en ⚙ hace que se vuelva a pedir. |
 | 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso por pista (el total se conoce desde el principio). |
 | 🚀 **Pantalla de inicio** | Lo primero que se ve al abrir la app, al menos 3 segundos y hasta que la ventana principal está lista. La misma imagen ilustra el instalador y el desinstalador. |
 | 💾 **Todo se recuerda** | Lista elegida, filtro, discos seleccionados, tamaño y posición de ventana… se guardan a cada cambio. |
@@ -77,7 +77,7 @@ Documentos/
     ├── tools/
     │   └── yt-dlp.exe                 ← si no lo tenías instalado
     ├── cache/
-    │   └── releases/                  ← detalle de cada disco ya consultado en Discogs (un .json por disco)
+    │   └── releases/                  ← detalle de cada disco ya consultado en Discogs (un .json por disco; se vacía desde ⚙)
     ├── temp/                          ← intermedios de yt-dlp y pistas escuchadas (previews/); se vacía al arrancar
     └── 639012345678901234/            ← una carpeta por descarga (DateTime.Ticks, siempre creciente)
         └── Pink Floyd - Animals (1977)/

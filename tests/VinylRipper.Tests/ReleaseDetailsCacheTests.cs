@@ -146,6 +146,34 @@ public sealed class ReleaseDetailsCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task Clear_forgets_everything_so_releases_are_asked_again()
+    {
+        var cache = new ReleaseDetailsCache(_dir);
+        cache.Store(Animals(1));
+        cache.Store(Animals(2));
+        File.WriteAllText(Path.Combine(_dir, "3.json.tmp"), "resto de un guardado a medias");
+        Assert.Equal(2, cache.Count);
+
+        var removed = cache.Clear();
+
+        Assert.Equal(2, removed);
+        Assert.Equal(0, cache.Count);
+        Assert.Empty(Directory.GetFiles(_dir));
+        Assert.False(cache.TryGet(1, out _));                 // tampoco queda en memoria
+        var calls = 0;
+        await cache.GetOrFetchAsync(1, _ => { calls++; return Task.FromResult(Animals(1)); });
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void Count_and_Clear_without_folder_are_zero()
+    {
+        var cache = new ReleaseDetailsCache(_dir);
+        Assert.Equal(0, cache.Count);
+        Assert.Equal(0, cache.Clear());
+    }
+
+    [Fact]
     public void Unwritable_folder_still_caches_in_memory()
     {
         // Un archivo donde debería ir la carpeta: no se puede crear, pero no revienta.
