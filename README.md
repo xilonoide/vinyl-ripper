@@ -69,6 +69,7 @@ Documentos/
     ├── settings.json                  ← configuración (token cifrado incluido)
     ├── tools/
     │   └── yt-dlp.exe                 ← si no lo tenías instalado
+    ├── temp/                          ← intermedios de yt-dlp (.webm, .part…); se vacía al arrancar
     └── 639012345678901234/            ← una carpeta por descarga (DateTime.Ticks, siempre creciente)
         └── Pink Floyd - Animals (1977)/
             ├── Pigs On The Wing (Part One).mp3

@@ -495,7 +495,7 @@ public sealed partial class MainViewModel : ObservableObject
 
             var rip = new RipService(
                 new DiscogsClient(_http, token),
-                new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, _services.Settings.AudioQuality)));
+                new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, _services.Settings.AudioQuality, _services.Paths.TempDirectory)));
 
             var progress = new Progress<RipProgress>(p =>
             {

@@ -76,7 +76,32 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.True(Directory.Exists(_paths.Root));
         Assert.True(Directory.Exists(_paths.ToolsDirectory));
+        Assert.True(Directory.Exists(_paths.TempDirectory));
         Assert.False(File.Exists(_paths.SettingsFile + ".tmp"));
+    }
+
+    [Fact]
+    public void ClearTemp_empties_temp_but_keeps_the_folder_and_other_data()
+    {
+        _paths.EnsureCreated();
+        File.WriteAllText(Path.Combine(_paths.TempDirectory, "x.webm"), "");
+        File.WriteAllText(Path.Combine(_paths.TempDirectory, "x.mp3.part"), "");
+        Directory.CreateDirectory(Path.Combine(_paths.TempDirectory, "sub"));
+        File.WriteAllText(Path.Combine(_paths.TempDirectory, "sub", "y.ytdl"), "");
+        File.WriteAllText(Path.Combine(_paths.ToolsDirectory, "yt-dlp.exe"), "");
+
+        var removed = _paths.ClearTemp();
+
+        Assert.Equal(3, removed);
+        Assert.True(Directory.Exists(_paths.TempDirectory));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_paths.TempDirectory));
+        Assert.True(File.Exists(Path.Combine(_paths.ToolsDirectory, "yt-dlp.exe")));
+    }
+
+    [Fact]
+    public void ClearTemp_is_a_no_op_when_folder_is_missing()
+    {
+        Assert.Equal(0, _paths.ClearTemp());
     }
 
     [Fact]

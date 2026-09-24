@@ -39,30 +39,36 @@ public class YtDlpProgressParserTests
 public class YtDlpDownloaderTests
 {
     [Fact]
-    public void BuildArguments_includes_mp3_extraction_quality_and_ffmpeg()
+    public void BuildArguments_includes_mp3_extraction_quality_ffmpeg_and_paths()
     {
-        var downloader = new YtDlpDownloader(new YtDlpOptions(@"C:\tools\yt-dlp.exe", @"C:\ffmpeg\bin\ffmpeg.exe", 3));
-        var args = downloader.BuildArguments("https://youtu.be/x", @"C:\out\01.%(ext)s").ToList();
+        var downloader = new YtDlpDownloader(new YtDlpOptions(@"C:\tools\yt-dlp.exe", @"C:\ffmpeg\bin\ffmpeg.exe", 3, @"D:\docs\vinyl-ripper\temp"));
+        var args = downloader.BuildArguments("https://youtu.be/x", @"C:\out\Disco", "Dogs").ToList();
 
         Assert.Contains("--extract-audio", args);
         Assert.Equal("mp3", args[args.IndexOf("--audio-format") + 1]);
         Assert.Equal("3", args[args.IndexOf("--audio-quality") + 1]);
         Assert.Equal(@"C:\ffmpeg\bin\ffmpeg.exe", args[args.IndexOf("--ffmpeg-location") + 1]);
-        Assert.Equal(@"C:\out\01.%(ext)s", args[args.IndexOf("--output") + 1]);
         Assert.Contains("--no-playlist", args);
         Assert.Contains("--newline", args);
         Assert.Equal("https://youtu.be/x", args[^1]);
         Assert.Equal("--", args[^2]);
+
+        // Plantilla relativa + rutas home/temp: los intermedios no tocan la carpeta del disco.
+        Assert.Equal("Dogs.%(ext)s", args[args.IndexOf("--output") + 1]);
+        var paths = args.Select((a, i) => (a, i)).Where(x => x.a == "--paths").Select(x => args[x.i + 1]).ToList();
+        Assert.Equal([@"home:C:\out\Disco", @"temp:D:\docs\vinyl-ripper\temp"], paths);
     }
 
     [Fact]
-    public void BuildArguments_omits_ffmpeg_when_not_configured_and_clamps_quality()
+    public void BuildArguments_omits_ffmpeg_and_temp_when_not_configured_and_clamps_quality()
     {
         var downloader = new YtDlpDownloader(new YtDlpOptions("yt-dlp", null, 42));
-        var args = downloader.BuildArguments("q", "o").ToList();
+        var args = downloader.BuildArguments("q", "out", "n").ToList();
 
         Assert.DoesNotContain("--ffmpeg-location", args);
         Assert.Equal("9", args[args.IndexOf("--audio-quality") + 1]);
+        Assert.Single(args, "--paths");
+        Assert.Equal("home:out", args[args.IndexOf("--paths") + 1]);
     }
 
     [Fact]

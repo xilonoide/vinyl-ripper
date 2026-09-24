@@ -3,7 +3,8 @@ using System.Text;
 
 namespace VinylRipper.YouTube;
 
-public sealed record YtDlpOptions(string YtDlpPath, string? FfmpegPath, int AudioQuality = 0);
+/// <param name="TempDirectory">Carpeta para los intermedios de yt-dlp; null = junto al MP3 final.</param>
+public sealed record YtDlpOptions(string YtDlpPath, string? FfmpegPath, int AudioQuality = 0, string? TempDirectory = null);
 
 public sealed class YtDlpException : Exception
 {
@@ -37,9 +38,8 @@ public sealed class YtDlpDownloader
         IProgress<YtDlpProgress>? progress = null, CancellationToken ct = default)
     {
         Directory.CreateDirectory(outputDirectory);
+        if (_options.TempDirectory is not null) Directory.CreateDirectory(_options.TempDirectory);
         var expected = Path.Combine(outputDirectory, fileNameWithoutExtension + ".mp3");
-        // Plantilla con nombre fijo: yt-dlp sustituye la extensión al convertir.
-        var template = Path.Combine(outputDirectory, fileNameWithoutExtension + ".%(ext)s");
 
         var psi = new ProcessStartInfo
         {
@@ -52,7 +52,7 @@ public sealed class YtDlpDownloader
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        foreach (var arg in BuildArguments(urlOrSearch, template))
+        foreach (var arg in BuildArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension))
             psi.ArgumentList.Add(arg);
 
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -106,7 +106,7 @@ public sealed class YtDlpDownloader
         throw new YtDlpException("yt-dlp terminó sin generar el MP3.") { ExitCode = 0, Output = output };
     }
 
-    internal IEnumerable<string> BuildArguments(string urlOrSearch, string outputTemplate)
+    internal IEnumerable<string> BuildArguments(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension)
     {
         yield return "--no-playlist";
         yield return "--newline";
@@ -117,7 +117,15 @@ public sealed class YtDlpDownloader
         yield return "--audio-quality"; yield return Math.Clamp(_options.AudioQuality, 0, 9).ToString();
         yield return "--embed-metadata";
         yield return "--default-search"; yield return "ytsearch1";
-        yield return "--output"; yield return outputTemplate;
+
+        // La plantilla debe ser relativa para que yt-dlp respete --paths: los intermedios van a
+        // "temp" y sólo el MP3 final se mueve a "home". Nombre fijo; yt-dlp pone la extensión.
+        yield return "--paths"; yield return "home:" + outputDirectory;
+        if (!string.IsNullOrWhiteSpace(_options.TempDirectory))
+        {
+            yield return "--paths"; yield return "temp:" + _options.TempDirectory;
+        }
+        yield return "--output"; yield return fileNameWithoutExtension + ".%(ext)s";
 
         if (!string.IsNullOrWhiteSpace(_options.FfmpegPath))
         {

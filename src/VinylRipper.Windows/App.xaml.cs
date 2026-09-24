@@ -20,6 +20,7 @@ public partial class App : Application
         // Composición manual: la app es pequeña y así queda claro qué depende de qué.
         var paths = AppPaths.Default();
         paths.EnsureCreated();
+        paths.ClearTemp(); // restos de yt-dlp de una descarga cancelada o de un cierre brusco
         var services = new AppServices(
             paths,
             new SettingsStore(paths),

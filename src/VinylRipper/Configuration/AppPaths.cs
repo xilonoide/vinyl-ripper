@@ -29,9 +29,36 @@ public sealed class AppPaths
     /// <summary>Carpeta donde se descargan herramientas externas (yt-dlp).</summary>
     public string ToolsDirectory => Path.Combine(Root, "tools");
 
+    /// <summary>Intermedios de yt-dlp (.webm, .part, .ytdl…). Se vacía en cada arranque.</summary>
+    public string TempDirectory => Path.Combine(Root, "temp");
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);
         Directory.CreateDirectory(ToolsDirectory);
+        Directory.CreateDirectory(TempDirectory);
+    }
+
+    /// <summary>
+    /// Borra el contenido de <see cref="TempDirectory"/>. Un archivo bloqueado (otra instancia
+    /// descargando) no debe impedir arrancar: se ignora y se limpiará la próxima vez.
+    /// </summary>
+    /// <returns>Número de entradas eliminadas.</returns>
+    public int ClearTemp()
+    {
+        if (!Directory.Exists(TempDirectory)) return 0;
+        var removed = 0;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(TempDirectory))
+        {
+            try
+            {
+                if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+                else File.Delete(entry);
+                removed++;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        return removed;
     }
 }
