@@ -18,8 +18,6 @@ public sealed partial class DiscogsClient
     public const string UserAgent = "VinylRipper/1.0 (+https://github.com/xilonoide/vinyl-ripper)";
     private const int PerPage = 100;
 
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-
     private readonly HttpClient _http;
     private readonly string _token;
     private DiscogsIdentity? _identity;

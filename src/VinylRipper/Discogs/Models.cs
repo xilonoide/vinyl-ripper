@@ -12,21 +12,11 @@ public enum DiscogsListKind
     UserList,
 }
 
-/// <summary>Una de las listas que el usuario puede elegir en el desplegable.</summary>
+/// <summary>Una de las listas que el usuario puede elegir en el árbol de fuentes.</summary>
 public sealed record DiscogsListDescriptor(DiscogsListKind Kind, long Id, string Name, int? Count)
 {
     /// <summary>Clave estable para guardar en configuración (p. ej. <c>CollectionFolder:0</c>).</summary>
     public string Key => $"{Kind}:{Id}";
-
-    public string DisplayName => Count is { } c ? $"{Name} ({c})" : Name;
-
-    public static bool TryParseKey(string? key, out DiscogsListKind kind, out long id)
-    {
-        kind = default; id = 0;
-        if (string.IsNullOrWhiteSpace(key)) return false;
-        var parts = key.Split(':', 2);
-        return parts.Length == 2 && Enum.TryParse(parts[0], out kind) && long.TryParse(parts[1], out id);
-    }
 }
 
 /// <summary>Disco tal y como aparece en una lista (información básica).</summary>

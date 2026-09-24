@@ -6,4 +6,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/VinylRipper.Tests/VinylRipper.Tests.csproj" />
   </Folder>
+  <Folder Name="/installer/">
+    <File Path="installer/VinylRipper.Windows.Installer/VinylRipper.Windows.Installer.iss" />
+    <File Path="installer/VinylRipper.Windows.Installer/build-installer.ps1" />
+  </Folder>
 </Solution>

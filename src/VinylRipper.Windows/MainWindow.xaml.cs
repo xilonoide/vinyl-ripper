@@ -64,7 +64,7 @@ public partial class MainWindow : Window
     private void SourceSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
     {
         // Guardamos el ancho del panel de fuente en estrellas relativas a la columna de discos.
-        var releasesWidth = ((Grid)SourceColumn.Parent()).ColumnDefinitions[2].ActualWidth;
+        var releasesWidth = ContentGrid.ColumnDefinitions[2].ActualWidth;
         if (releasesWidth > 0)
         {
             _services.Settings.SourcePaneWidth = Math.Round(SourceColumn.ActualWidth / releasesWidth, 3);
@@ -156,10 +156,4 @@ public partial class MainWindow : Window
         }
         _services.Save();
     }
-}
-
-file static class ColumnDefinitionExtensions
-{
-    /// <summary>ColumnDefinition no expone Parent públicamente; lo obtenemos por el árbol lógico.</summary>
-    public static DependencyObject Parent(this ColumnDefinition column) => LogicalTreeHelper.GetParent(column);
 }

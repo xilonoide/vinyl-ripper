@@ -11,7 +11,7 @@ public class OutputFoldersTests
         var a = OutputFolders.NextName(new DateTime(2026, 1, 1));
         var b = OutputFolders.NextName(new DateTime(2026, 1, 2));
 
-        Assert.True(OutputFolders.IsTicksFolderName(a));
+        Assert.All(a, c => Assert.True(char.IsAsciiDigit(c)));
         Assert.True(long.Parse(b) > long.Parse(a));
     }
 
@@ -35,12 +35,6 @@ public class OutputFoldersTests
         }
     }
 
-    [Theory]
-    [InlineData("638000000000000000", true)]
-    [InlineData("", false)]
-    [InlineData("abc", false)]
-    [InlineData("12a", false)]
-    public void IsTicksFolderName(string name, bool expected) => Assert.Equal(expected, OutputFolders.IsTicksFolderName(name));
 }
 
 public class FileNameSanitizerTests

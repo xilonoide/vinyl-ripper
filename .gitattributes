@@ -1,0 +1,10 @@
+# Normaliza saltos de línea: LF en el repo, nativos en el checkout.
+* text=auto
+
+*.ps1  text eol=crlf
+*.iss  text eol=crlf
+*.cmd  text eol=crlf
+
+*.ico  binary
+*.png  binary
+*.mp3  binary

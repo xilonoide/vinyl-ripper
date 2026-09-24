@@ -11,7 +11,7 @@ public sealed class AppSettings
     /// <summary>Token personal de Discogs cifrado con AES-256 (ver <see cref="Security.TokenProtector"/>).</summary>
     public string? EncryptedDiscogsToken { get; set; }
 
-    /// <summary>Clave (Kind:Id) de la lista de Discogs seleccionada en el desplegable.</summary>
+    /// <summary>Clave (Kind:Id) de la hoja del árbol de fuentes seleccionada (carpeta, deseados, inventario o lista).</summary>
     public string? SelectedListKey { get; set; }
 
     /// <summary>Raíz de salida. Si es null se usa Documentos/vinyl-ripper.</summary>

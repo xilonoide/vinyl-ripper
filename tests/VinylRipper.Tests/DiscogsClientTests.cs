@@ -74,19 +74,10 @@ public class DiscogsParsingTests
     }
 
     [Fact]
-    public void ListDescriptor_key_roundtrips()
+    public void ListDescriptor_key_is_stable_per_kind_and_id()
     {
-        var d = new DiscogsListDescriptor(DiscogsListKind.CollectionFolder, 123, "Colección · Rock", 40);
-
-        Assert.Equal("CollectionFolder:123", d.Key);
-        Assert.Equal("Colección · Rock (40)", d.DisplayName);
-        Assert.True(DiscogsListDescriptor.TryParseKey(d.Key, out var kind, out var id));
-        Assert.Equal(DiscogsListKind.CollectionFolder, kind);
-        Assert.Equal(123, id);
-
-        Assert.False(DiscogsListDescriptor.TryParseKey(null, out _, out _));
-        Assert.False(DiscogsListDescriptor.TryParseKey("Basura", out _, out _));
-        Assert.False(DiscogsListDescriptor.TryParseKey("Wantlist:abc", out _, out _));
+        Assert.Equal("CollectionFolder:123", new DiscogsListDescriptor(DiscogsListKind.CollectionFolder, 123, "Rock", 40).Key);
+        Assert.Equal("Wantlist:0", new DiscogsListDescriptor(DiscogsListKind.Wantlist, 0, "Deseados", null).Key);
     }
 }
 

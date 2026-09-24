@@ -81,12 +81,22 @@ La carpeta raíz de salida y la calidad MP3 se cambian en ⚙.
 ## 🧰 Requisitos
 
 - **Windows 10 20H1+ / Windows 11** (barra de título oscura vía DWM).
-- **[.NET 10 SDK](https://dotnet.microsoft.com/download)** para compilar.
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download)** sólo para compilar (el instalador ya lleva el runtime).
 - **ffmpeg** en el `PATH` (o su ruta en ⚙). Es lo que convierte a MP3:
   ```powershell
   winget install Gyan.FFmpeg
   ```
 - `yt-dlp` es opcional: si no está, la app lo descarga.
+
+## 📦 Instalar
+
+Descarga `VinylRipper-Setup-<versión>-win-x64.exe` de [Releases](https://github.com/xilonoide/vinyl-ripper/releases) y ejecútalo. El instalador:
+
+- se instala **sólo para tu usuario** (`%LocalAppData%\Programs\Vinyl Ripper`), sin pedir permisos de administrador;
+- es **autocontenido**: no necesitas tener .NET instalado;
+- crea el acceso en el menú Inicio (y en el escritorio si lo marcas) y un atajo a la carpeta de descargas;
+- avisa al terminar si no encuentra `ffmpeg` en el `PATH`;
+- al **desinstalar** pregunta si quieres borrar también `Documentos\vinyl-ripper` (configuración, yt-dlp y todos los MP3). Por defecto, no.
 
 ## 🚀 Compilar y ejecutar
 
@@ -97,11 +107,15 @@ dotnet build
 dotnet run --project src/VinylRipper.Windows
 ```
 
-Ejecutable autocontenido:
+### Generar el instalador
+
+Requiere [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`; vale instalado por usuario o por máquina).
 
 ```powershell
-dotnet publish src/VinylRipper.Windows -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+pwsh installer/VinylRipper.Windows.Installer/build-installer.ps1
 ```
+
+El script lee la versión del csproj, hace `dotnet publish` (win-x64, self-contained, ReadyToRun) y compila `VinylRipper.Windows.Installer.iss`. El `Setup.exe` queda en `installer/VinylRipper.Windows.Installer/output/`. Para subir versión, cambia `<Version>` en `src/VinylRipper.Windows/VinylRipper.Windows.csproj`.
 
 ## 🧪 Tests
 
@@ -129,6 +143,10 @@ vinyl-ripper/
 │       └── ViewModels/         MainViewModel · SourceNode · SettingsViewModel
 ├── tests/
 │   └── VinylRipper.Tests/      🧪 xUnit sobre el core
+├── installer/
+│   └── VinylRipper.Windows.Installer/
+│       ├── VinylRipper.Windows.Installer.iss   📦 script Inno Setup (por usuario, bilingüe es/en)
+│       └── build-installer.ps1                 publish + ISCC → output/VinylRipper-Setup-<ver>-win-x64.exe
 └── assets/
     └── make-icon.ps1           🎨 genera Assets/vinyl.ico (9 tamaños) y vinyl-256.png
 ```
@@ -141,4 +159,4 @@ Vinyl Ripper es una herramienta personal para escuchar en digital los discos que
 
 ## 📄 Licencia
 
-MIT
+[MIT](LICENSE)

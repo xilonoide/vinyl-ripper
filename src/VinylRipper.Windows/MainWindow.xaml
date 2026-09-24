@@ -108,7 +108,7 @@
         </Grid>
 
         <!-- ===== Contenido: fuente | discos + pistas | botones | seleccionados ===== -->
-        <Grid Grid.Row="1">
+        <Grid x:Name="ContentGrid" Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SourceColumn" Width="0.6*" MinWidth="180" />
                 <ColumnDefinition Width="Auto" />

@@ -21,6 +21,4 @@ public static class OutputFolders
             return path;
         }
     }
-
-    public static bool IsTicksFolderName(string name) => name.Length > 0 && name.All(char.IsAsciiDigit);
 }

@@ -19,6 +19,10 @@ TestResults/
 coverage*.xml
 *.trx
 
+# Instalador (salidas de build-installer.ps1)
+installer/**/publish/
+installer/**/output/
+
 # NuGet
 *.nupkg
 *.snupkg

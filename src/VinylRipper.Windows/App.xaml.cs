@@ -20,13 +20,13 @@ public partial class App : Application
         // Composición manual: la app es pequeña y así queda claro qué depende de qué.
         var paths = AppPaths.Default();
         paths.EnsureCreated();
-        var store = new SettingsStore(paths);
-        var protector = new TokenProtector(new MachineKeyMaterialProvider());
-        var locator = new ToolLocator(paths);
-        var services = new AppServices(paths, store, protector, locator);
+        var services = new AppServices(
+            paths,
+            new SettingsStore(paths),
+            new TokenProtector(new MachineKeyMaterialProvider()),
+            new ToolLocator(paths));
 
-        var vm = new MainViewModel(services);
-        var window = new MainWindow(vm, services);
+        var window = new MainWindow(new MainViewModel(services), services);
         MainWindow = window;
         window.Show();
     }
@@ -36,16 +36,4 @@ public partial class App : Application
         e.Handled = true;
         DarkMessageBox.Show(MainWindow, "Error inesperado", e.Exception.Message, MessageKind.Error);
     }
-}
-
-/// <summary>Servicios compartidos por las ventanas.</summary>
-public sealed record AppServices(AppPaths Paths, SettingsStore Store, TokenProtector Protector, ToolLocator Locator)
-{
-    public AppSettings Settings { get; } = Store.Load();
-
-    public void Save() => Store.Save(Settings);
-
-    public string? DiscogsToken => Protector.TryUnprotect(Settings.EncryptedDiscogsToken);
-
-    public string OutputRoot => string.IsNullOrWhiteSpace(Settings.OutputRoot) ? Paths.Root : Settings.OutputRoot;
 }
