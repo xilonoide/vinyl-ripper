@@ -32,6 +32,9 @@ public sealed class AppPaths
     /// <summary>Intermedios de yt-dlp (.webm, .part, .ytdl…). Se vacía en cada arranque.</summary>
     public string TempDirectory => Path.Combine(Root, "temp");
 
+    /// <summary>Detalle de discos ya pedidos a Discogs, para no volver a pedirlos. No se vacía.</summary>
+    public string ReleaseCacheDirectory => Path.Combine(Root, "cache", "releases");
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);

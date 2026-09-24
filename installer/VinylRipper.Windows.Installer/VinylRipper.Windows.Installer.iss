@@ -63,6 +63,10 @@ SolidCompression=yes
 LZMAUseSeparateProcess=yes
 WizardStyle=modern
 WizardSizePercent=110
+; Imágenes del asistente (instalador y desinstalador), generadas desde assets/splash.jpg con
+; assets/make-splash.ps1. Varios tamaños: Inno elige el que mejor encaja con el escalado de pantalla.
+WizardImageFile=images\wizard-164.png,images\wizard-246.png,images\wizard-328.png,images\wizard-410.png
+WizardSmallImageFile=images\wizard-small-55.png,images\wizard-small-83.png,images\wizard-small-110.png,images\wizard-small-138.png
 ShowLanguageDialog=auto
 CloseApplications=yes
 RestartApplications=no

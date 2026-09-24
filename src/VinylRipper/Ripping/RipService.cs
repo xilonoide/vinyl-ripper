@@ -27,22 +27,27 @@ public sealed record RipResult(string OutputFolder, int Downloaded, IReadOnlyLis
     IReadOnlyList<string> ReleasesWithoutCover);
 
 /// <summary>
-/// Orquesta el ripeo de un conjunto de pistas: por cada disco implicado pide a Discogs los vídeos
-/// asociados, empareja cada pista con uno (o recurre a una búsqueda en YouTube) y la baja a MP3 en
-/// <c>&lt;salida&gt;/Artista - Título (Año)/Pista.mp3</c>. Si hay <see cref="CoverArtEmbedder"/>, a cada
-/// MP3 recién generado se le incrusta la portada del disco en Discogs (la misma en todas sus pistas).
+/// Orquesta el ripeo de un conjunto de pistas: por cada disco implicado obtiene sus vídeos de Discogs
+/// (de la <see cref="ReleaseDetailsCache"/> si ya se pidieron), empareja cada pista con uno (o recurre a
+/// una búsqueda en YouTube) y la baja a MP3 en <c>&lt;salida&gt;/Artista - Título (Año)/Artista - Canción.mp3</c>.
+/// Si hay <see cref="CoverArtEmbedder"/>, a cada MP3 recién generado se le incrusta la portada del disco
+/// en Discogs (la misma en todas sus pistas).
 /// </summary>
 public sealed class RipService
 {
     private readonly DiscogsClient _discogs;
     private readonly YtDlpDownloader _downloader;
     private readonly CoverArtEmbedder? _covers;
+    private readonly ReleaseDetailsCache? _releases;
 
-    public RipService(DiscogsClient discogs, YtDlpDownloader downloader, CoverArtEmbedder? covers = null)
+    /// <param name="releases">Si se indica, el detalle de los discos ya pedidos no se vuelve a pedir a la API.</param>
+    public RipService(DiscogsClient discogs, YtDlpDownloader downloader, CoverArtEmbedder? covers = null,
+        ReleaseDetailsCache? releases = null)
     {
         _discogs = discogs;
         _downloader = downloader;
         _covers = covers;
+        _releases = releases;
     }
 
     /// <param name="outputFolder">Carpeta ya creada (normalmente <see cref="OutputFolders.CreateNext"/>).</param>
@@ -70,7 +75,10 @@ public sealed class RipService
             progress?.Report(new RipProgress(RipPhase.Resolving, completed, total, releaseName, null, 0));
             try
             {
-                var details = await _discogs.GetReleaseAsync(release.ReleaseId, ct);
+                var id = release.ReleaseId;
+                var details = _releases is null
+                    ? await _discogs.GetReleaseAsync(id, ct)
+                    : await _releases.GetOrFetchAsync(id, fetchCt => _discogs.GetReleaseAsync(id, fetchCt), ct);
                 videos = details.Videos;
                 coverUrl = details.CoverUrl ?? coverUrl;
             }
@@ -81,15 +89,14 @@ public sealed class RipService
 
             var usedVideos = new HashSet<string>();
             var ordered = group.OrderBy(t => t.Index).ToList();
-            var fileNames = BuildTrackFileNames(ordered.Select(t => t.Track).ToList());
+            var fileNames = BuildTrackFileNames(release.Artist, ordered.Select(t => t.Track).ToList());
             for (var i = 0; i < ordered.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 var sel = ordered[i];
                 var track = sel.Track;
                 var fileName = fileNames[i];
-                var video = TrackMatcher.FindVideo(track, videos, usedVideos);
-                var source = video?.Uri ?? YtDlpDownloader.SearchUrl(TrackMatcher.BuildSearchQuery(release.Artist, track));
+                var (source, video) = TrackMatcher.ResolveSource(release.Artist, track, videos, usedVideos);
                 if (video is not null) usedVideos.Add(video.Uri);
 
                 var snapshot = completed;
@@ -158,21 +165,32 @@ public sealed class RipService
         return FileNameSanitizer.Sanitize(name, fallback: release.ReleaseId.ToString());
     }
 
-    /// <summary>Nombre del MP3: el título de la pista (precedido del artista si es distinto al del disco).</summary>
-    internal static string BuildTrackFileName(Track track)
+    /// <summary>
+    /// Nombre del MP3: "Artista - Canción". El artista es el de la pista si Discogs lo indica y, si no,
+    /// el del disco. En recopilatorios ("Various") sin artista por pista queda sólo la canción.
+    /// </summary>
+    internal static string BuildTrackFileName(string releaseArtist, Track track)
     {
-        var title = track.Artist is { Length: > 0 } a ? $"{a} - {track.Title}" : track.Title;
-        return FileNameSanitizer.Sanitize(title, fallback: string.IsNullOrEmpty(track.Position) ? "pista" : track.Position);
+        // El título se sanea aparte: si se queda vacío ("..."), cae en la posición del vinilo.
+        var title = FileNameSanitizer.Sanitize(track.Title, fallback: string.IsNullOrEmpty(track.Position) ? "pista" : track.Position);
+        var artist = FileArtist(releaseArtist, track);
+        return artist is null ? title : FileNameSanitizer.Sanitize($"{artist} - {title}", fallback: title);
+    }
+
+    private static string? FileArtist(string releaseArtist, Track track)
+    {
+        var artist = (string.IsNullOrWhiteSpace(track.Artist) ? releaseArtist : track.Artist)?.Trim();
+        return string.IsNullOrEmpty(artist) || artist.Equals("Various", StringComparison.OrdinalIgnoreCase) ? null : artist;
     }
 
     /// <summary>
-    /// Nombres de archivo para las pistas de un disco, en el mismo orden. Si varias comparten título
+    /// Nombres de archivo para las pistas de un disco, en el mismo orden. Si varias comparten nombre
     /// (p. ej. un disco con todos los cortes llamados "Anonim") se distinguen con su posición en el
-    /// vinilo: "Anonim A1", "Anonim A2", "Anonim B1"… Sin posición, o si aun así coinciden, se añade " (2)", " (3)"…
+    /// vinilo: "Artista - Anonim A1", "Artista - Anonim A2"… Sin posición, o si aun así coinciden, se añade " (2)", " (3)"…
     /// </summary>
-    internal static IReadOnlyList<string> BuildTrackFileNames(IReadOnlyList<Track> tracks)
+    internal static IReadOnlyList<string> BuildTrackFileNames(string releaseArtist, IReadOnlyList<Track> tracks)
     {
-        var baseNames = tracks.Select(BuildTrackFileName).ToList();
+        var baseNames = tracks.Select(t => BuildTrackFileName(releaseArtist, t)).ToList();
         var repeated = baseNames
             .GroupBy(n => n, StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)

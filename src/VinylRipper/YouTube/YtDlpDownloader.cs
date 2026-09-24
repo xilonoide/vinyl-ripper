@@ -15,7 +15,8 @@ public sealed class YtDlpException : Exception
 
 /// <summary>
 /// Envuelve el proceso yt-dlp para extraer el audio de un vídeo (o del primer resultado de una
-/// búsqueda) a MP3. Reporta progreso por porcentaje y devuelve la ruta del archivo generado.
+/// búsqueda): a MP3 para la descarga, o a m4a para escucharlo en la app. Reporta progreso por
+/// porcentaje y devuelve la ruta del archivo generado.
 /// </summary>
 public sealed class YtDlpDownloader
 {
@@ -34,12 +35,27 @@ public sealed class YtDlpDownloader
     /// Descarga <paramref name="urlOrSearch"/> como MP3 en <paramref name="outputDirectory"/> con el
     /// nombre <paramref name="fileNameWithoutExtension"/>.mp3.
     /// </summary>
-    public async Task<string> DownloadMp3Async(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension,
-        IProgress<YtDlpProgress>? progress = null, CancellationToken ct = default)
+    public Task<string> DownloadMp3Async(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension,
+        IProgress<YtDlpProgress>? progress = null, CancellationToken ct = default) =>
+        RunAsync(BuildArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension),
+            outputDirectory, fileNameWithoutExtension + ".mp3", progress, ct);
+
+    /// <summary>
+    /// Descarga el audio para escucharlo en la app: <paramref name="fileNameWithoutExtension"/>.m4a.
+    /// Si YouTube ya lo sirve en m4a se guarda tal cual; si sólo hay Opus/WebM, ffmpeg lo pasa a AAC,
+    /// que Media Foundation (con lo que reproduce la app) abre en cualquier Windows.
+    /// </summary>
+    public Task<string> DownloadPreviewAsync(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension,
+        IProgress<YtDlpProgress>? progress = null, CancellationToken ct = default) =>
+        RunAsync(BuildPreviewArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension),
+            outputDirectory, fileNameWithoutExtension + ".m4a", progress, ct);
+
+    private async Task<string> RunAsync(IEnumerable<string> arguments, string outputDirectory, string expectedFileName,
+        IProgress<YtDlpProgress>? progress, CancellationToken ct)
     {
         Directory.CreateDirectory(outputDirectory);
         if (_options.TempDirectory is not null) Directory.CreateDirectory(_options.TempDirectory);
-        var expected = Path.Combine(outputDirectory, fileNameWithoutExtension + ".mp3");
+        var expected = Path.Combine(outputDirectory, expectedFileName);
 
         var psi = new ProcessStartInfo
         {
@@ -52,7 +68,7 @@ public sealed class YtDlpDownloader
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        foreach (var arg in BuildArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension))
+        foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -103,23 +119,39 @@ public sealed class YtDlpDownloader
         if (File.Exists(expected)) return expected;
         if (destination is not null && File.Exists(destination)) return destination;
 
-        throw new YtDlpException("yt-dlp terminó sin generar el MP3.") { ExitCode = 0, Output = output };
+        throw new YtDlpException($"yt-dlp terminó sin generar {expectedFileName}.") { ExitCode = 0, Output = output };
     }
 
-    internal IEnumerable<string> BuildArguments(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension)
+    /// <summary>Argumentos para el MP3 final: calidad configurable y metadatos de YouTube.</summary>
+    internal IEnumerable<string> BuildArguments(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension) =>
+    [
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--audio-quality", Math.Clamp(_options.AudioQuality, 0, 9).ToString(),
+        "--embed-metadata",
+        .. CommonArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension),
+    ];
+
+    /// <summary>Argumentos para la escucha previa: el mejor audio m4a, sin recodificar si ya lo es.</summary>
+    internal IEnumerable<string> BuildPreviewArguments(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension) =>
+    [
+        "--format", "bestaudio[ext=m4a]/bestaudio",
+        "--extract-audio",
+        "--audio-format", "m4a",
+        .. CommonArguments(urlOrSearch, outputDirectory, fileNameWithoutExtension),
+    ];
+
+    /// <summary>Lo que comparten la descarga y la escucha: salida, rutas, ffmpeg y, al final, la fuente.</summary>
+    private IEnumerable<string> CommonArguments(string urlOrSearch, string outputDirectory, string fileNameWithoutExtension)
     {
         yield return "--no-playlist";
         yield return "--newline";
         yield return "--no-colors";
         yield return "--no-mtime";
-        yield return "--extract-audio";
-        yield return "--audio-format"; yield return "mp3";
-        yield return "--audio-quality"; yield return Math.Clamp(_options.AudioQuality, 0, 9).ToString();
-        yield return "--embed-metadata";
         yield return "--default-search"; yield return "ytsearch1";
 
         // La plantilla debe ser relativa para que yt-dlp respete --paths: los intermedios van a
-        // "temp" y sólo el MP3 final se mueve a "home". Nombre fijo; yt-dlp pone la extensión.
+        // "temp" y sólo el archivo final se mueve a "home". Nombre fijo; yt-dlp pone la extensión.
         yield return "--paths"; yield return "home:" + outputDirectory;
         if (!string.IsNullOrWhiteSpace(_options.TempDirectory))
         {
@@ -145,7 +177,7 @@ public sealed class YtDlpDownloader
         {
             if (error.Contains("ffprobe and ffmpeg not found", StringComparison.OrdinalIgnoreCase) ||
                 error.Contains("ffmpeg not found", StringComparison.OrdinalIgnoreCase))
-                return "yt-dlp necesita ffmpeg para convertir a MP3 y no lo encuentra. Instálalo o indica su ruta en la configuración.";
+                return "yt-dlp necesita ffmpeg para convertir el audio y no lo encuentra. Instálalo o indica su ruta en la configuración.";
             return error;
         }
         return lines.LastOrDefault() ?? "yt-dlp falló sin mensaje.";

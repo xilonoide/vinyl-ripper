@@ -17,6 +17,39 @@
         <c:NullToVisibilityConverter x:Key="NullToVis" />
         <c:NullToVisibilityConverter x:Key="NullToVisInv" Invert="True" />
         <c:UrlToImageConverter x:Key="UrlToImage" />
+        <c:PreviewStateConverter x:Key="PreviewState" />
+
+        <!-- Botón de escucha de cada pista: ▶ parada, spinner mientras se prepara (clic = cancelar), ■ sonando.
+             El estado de la fila llega en Tag (PreviewStateConverter). El spinner va en una plantilla para
+             que cada fila tenga el suyo (un control en un Setter se compartiría entre todas). -->
+        <Style x:Key="PreviewRowButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="MinWidth" Value="26" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Content" Value="▶" />
+            <Setter Property="ToolTip" Value="Escuchar" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="{x:Static vm:PreviewState.Playing}">
+                    <Setter Property="Content" Value="■" />
+                    <Setter Property="ToolTip" Value="Parar" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="{x:Static vm:PreviewState.Loading}">
+                    <Setter Property="ToolTip" Value="Preparando… (clic para cancelar)" />
+                    <Setter Property="ContentTemplate">
+                        <Setter.Value>
+                            <DataTemplate>
+                                <c:Spinner Width="14" Height="14" />
+                            </DataTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- Nivel 1: nodo del árbol de fuentes -->
         <HierarchicalDataTemplate x:Key="SourceTemplate" DataType="{x:Type vm:SourceNode}" ItemsSource="{Binding Children}">
@@ -60,17 +93,32 @@
         <DataTemplate x:Key="TrackTemplate" DataType="{x:Type discogs:TrackSelection}">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="36" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding DisplayPosition}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+
+                <!-- Escuchar. Tag = estado de ESTA fila; PreviewRowButton pinta ▶ / spinner / ■ según él. -->
+                <Button Grid.Column="0" Style="{StaticResource PreviewRowButton}"
+                        Command="{Binding DataContext.TogglePreviewCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        CommandParameter="{Binding}">
+                    <Button.Tag>
+                        <MultiBinding Converter="{StaticResource PreviewState}">
+                            <Binding />
+                            <Binding Path="DataContext.Player.CurrentKey" RelativeSource="{RelativeSource AncestorType=Window}" />
+                            <Binding Path="DataContext.Player.State" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </Button.Tag>
+                </Button>
+
+                <TextBlock Grid.Column="1" Text="{Binding DisplayPosition}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Track.Title}" />
                     <TextBlock Text="{Binding Track.Artist}" Style="{StaticResource Muted}" FontSize="11"
                                Visibility="{Binding Track.Artist, Converter={StaticResource NullToVis}}" />
                 </StackPanel>
-                <TextBlock Grid.Column="2" Text="{Binding Track.Duration}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBlock Grid.Column="3" Text="{Binding Track.Duration}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
             </Grid>
         </DataTemplate>
     </Window.Resources>
@@ -79,6 +127,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -218,8 +267,12 @@
                     <TextBlock Style="{StaticResource Heading}">
                         <Run Text="Seleccionados" /><Run Text=" (" /><Run Text="{Binding Selected.Count, Mode=OneWay}" /><Run Text=" pistas)" />
                     </TextBlock>
+                    <!-- Agrupada por disco: sin IsVirtualizingWhenGrouping WPF crea todas las filas de golpe
+                         (con cientos de discos seleccionados la ventana tardaba muchísimo en aparecer). -->
                     <ListBox x:Name="SelectedList" Grid.Row="1" ItemsSource="{Binding SelectedView}"
                              ItemTemplate="{StaticResource TrackTemplate}" SelectionMode="Extended"
+                             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              MouseDoubleClick="SelectedList_MouseDoubleClick">
                         <ListBox.GroupStyle>
                             <GroupStyle ContainerStyle="{StaticResource GroupHeader}" />
@@ -239,8 +292,41 @@
             </Border>
         </Grid>
 
+        <!-- ===== Escucha previa: ■ · título · tiempo · barra (clic para saltar) · duración ===== -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="10,6"
+                Visibility="{Binding Player.IsActive, Converter={StaticResource BoolToVis}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Style="{StaticResource IconButton}" Width="28" Height="28" MinWidth="28" MinHeight="28"
+                        Padding="0" FontSize="12" Content="■" ToolTip="Parar" Command="{Binding StopPreviewCommand}" />
+                <c:Spinner Grid.Column="1" Width="16" Height="16" Margin="8,0,0,0"
+                           Visibility="{Binding Player.IsLoading, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Grid.Column="2" Text="{Binding Player.StatusLine}" Margin="10,0,16,0" VerticalAlignment="Center"
+                           MaxWidth="420" TextTrimming="CharacterEllipsis" ToolTip="{Binding Player.StatusLine}" />
+                <TextBlock Grid.Column="3" Text="{Binding Player.PositionText}" Style="{StaticResource Muted}"
+                           VerticalAlignment="Center" MinWidth="40" TextAlignment="Right" Margin="0,0,10,0" />
+                <ProgressBar x:Name="PreviewBar" Grid.Column="4" Height="10" Minimum="0" Maximum="100" Cursor="Hand"
+                             VerticalAlignment="Center" ToolTip="Pincha o arrastra para saltar a otro punto"
+                             Value="{Binding Player.Percent, Mode=OneWay}"
+                             IsIndeterminate="{Binding Player.IsLoading, Mode=OneWay}"
+                             MouseLeftButtonDown="PreviewBar_MouseLeftButtonDown"
+                             MouseMove="PreviewBar_MouseMove"
+                             MouseLeftButtonUp="PreviewBar_MouseLeftButtonUp" />
+                <TextBlock Grid.Column="5" Text="{Binding Player.DurationText}" Style="{StaticResource Muted}"
+                           VerticalAlignment="Center" MinWidth="40" Margin="10,0,0,0" />
+            </Grid>
+        </Border>
+
         <!-- ===== Pie: acciones + progreso ===== -->
-        <Grid Grid.Row="2" Margin="0,12,0,0">
+        <Grid Grid.Row="3" Margin="0,12,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />

@@ -25,12 +25,15 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🔐 **Token cifrado** | El token personal de Discogs se guarda cifrado con **AES-256-GCM** (clave derivada con PBKDF2 a partir de la identidad de máquina + usuario). Nunca toca el disco en claro. |
 | 🗂 **Tres niveles** | Árbol de fuentes (Colección → carpetas, Deseados, Inventario, Listas → listas) → discos → pistas. |
 | ✅ **Selección acumulativa** | Marca discos completos o pistas sueltas con Ctrl / Shift + clic, pásalos a *Seleccionados* (agrupados por disco) y sigue añadiendo desde otras carpetas o listas. |
+| 🎧 **Escuchar antes de bajar** | Cada pista (en *Pistas* y en *Seleccionados*) tiene un ▶ que pasa a ■ mientras suena. Un spinner indica que se está preparando (unos segundos la primera vez). Abajo aparece una barra de progreso: pincha o arrastra para saltar a cualquier punto. Suena exactamente lo que se descargaría. |
 | 🎵 **Vídeos de Discogs primero** | Si la edición tiene vídeos de YouTube asociados en Discogs se usan esos; si no, se busca `artista + pista`. |
 | 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`; desde ⚙ se actualiza con un clic. |
 | 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) van a `Documentos/vinyl-ripper/temp`, que se vacía en cada arranque; en la carpeta del disco sólo aparecen MP3. |
 | 🖼 **Portada en cada MP3** | Tras generar cada MP3 se le incrusta la portada del disco en Discogs (la misma en todas sus pistas) como etiqueta **ID3v2.3**, con ffmpeg y sin recodificar el audio. Si un disco no tiene portada, el resumen final lo indica. |
-| 🏷 **Nombres limpios** | Cada MP3 se llama como la pista, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Anonim A1`, `Anonim A2`…). |
+| 🏷 **Nombres limpios** | Cada MP3 se llama `Artista - Canción`, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Artista - Anonim A1`, `Artista - Anonim A2`…). |
+| ⚡ **Discogs sólo una vez** | El detalle de cada disco (tracklist, vídeos y portada) se guarda en `Documentos/vinyl-ripper/cache` y no se vuelve a pedir a la API, ni en siguientes arranques. Añadir un disco que ya está entero en *Seleccionados* ni siquiera lo consulta. |
 | 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso por pista (el total se conoce desde el principio). |
+| 🚀 **Pantalla de inicio** | Lo primero que se ve al abrir la app, al menos 3 segundos y hasta que la ventana principal está lista. La misma imagen ilustra el instalador y el desinstalador. |
 | 💾 **Todo se recuerda** | Lista elegida, filtro, discos seleccionados, tamaño y posición de ventana… se guardan a cada cambio. |
 | 🌙 **Modo oscuro de verdad** | Desplegables, listas, hovers, scrollbars, tooltips, diálogos y hasta la barra de título nativa. |
 | ❌ **Sin botones de cerrar** | Ventanas y diálogos se cierran con la X. Sin confirmación al salir. |
@@ -60,9 +63,10 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 
 1. Pulsa **⚙** y pega tu token de Discogs (*discogs.com → Settings → Developers → Generate new token*). Puedes comprobarlo con **Probar**.
 2. En **Fuente** elige una carpeta de la colección, deseados, inventario o una lista; los discos se cargan con progreso por páginas.
-3. Marca discos y pulsa **Añadir discos completos ➜**, o marca uno para ver sus **Pistas** y añade sólo las que quieras con **Añadir pistas ➜**. Cambia de carpeta o lista y sigue acumulando.
-4. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada; el progreso es por pista.
-5. **📂 Abrir carpeta de salida** abre la última carpeta creada en el Explorador.
+3. Marca discos y pulsa **Añadir discos completos ➜**, o marca uno para ver sus **Pistas** y añade sólo las que quieras con **Añadir pistas ➜** (o con doble clic). Cambia de carpeta o lista y sigue acumulando.
+4. ¿No sabes si es la versión buena? Pulsa **▶** en cualquier pista, en *Pistas* o en *Seleccionados*, para escucharla. Pincha en la barra de abajo para saltar a otro punto y **■** para parar.
+5. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada; el progreso es por pista.
+6. **📂 Abrir carpeta de salida** abre la última carpeta creada en el Explorador.
 
 ### 📁 Dónde acaba todo
 
@@ -72,15 +76,17 @@ Documentos/
     ├── settings.json                  ← configuración (token cifrado incluido)
     ├── tools/
     │   └── yt-dlp.exe                 ← si no lo tenías instalado
-    ├── temp/                          ← intermedios de yt-dlp (.webm, .part…); se vacía al arrancar
+    ├── cache/
+    │   └── releases/                  ← detalle de cada disco ya consultado en Discogs (un .json por disco)
+    ├── temp/                          ← intermedios de yt-dlp y pistas escuchadas (previews/); se vacía al arrancar
     └── 639012345678901234/            ← una carpeta por descarga (DateTime.Ticks, siempre creciente)
         └── Pink Floyd - Animals (1977)/
-            ├── Pigs On The Wing (Part One).mp3
-            ├── Dogs.mp3
+            ├── Pink Floyd - Pigs On The Wing (Part One).mp3
+            ├── Pink Floyd - Dogs.mp3
             └── …
 ```
 
-Cada MP3 se llama como la pista. Si varias pistas del disco comparten título (cortes sin nombre, «Anonim», «Untitled»…), se distinguen con su posición en el vinilo: `Anonim A1.mp3`, `Anonim A2.mp3`, `Anonim B1.mp3`.
+Cada MP3 se llama `Artista - Canción`. El artista es el de la pista si Discogs lo indica (recopilatorios, colaboraciones) y, si no, el del disco; en un recopilatorio («Various») sin artista por pista queda sólo la canción. Si varias pistas del disco comparten título (cortes sin nombre, «Anonim», «Untitled»…), se distinguen con su posición en el vinilo: `Artista - Anonim A1.mp3`, `Artista - Anonim A2.mp3`, `Artista - Anonim B1.mp3`.
 
 La carpeta raíz de salida y la calidad MP3 se cambian en ⚙.
 
@@ -123,13 +129,19 @@ pwsh installer/VinylRipper.Windows.Installer/build-installer.ps1
 
 El script lee la versión del csproj, hace `dotnet publish` (win-x64, self-contained, ReadyToRun) y compila `VinylRipper.Windows.Installer.iss`. El `Setup.exe` queda en `installer/VinylRipper.Windows.Installer/output/`. Para subir versión, cambia `<Version>` en `src/VinylRipper.Windows/VinylRipper.Windows.csproj`.
 
+Las imágenes del asistente (instalador y desinstalador) y la pantalla de inicio salen de `assets/splash.jpg`. Si cambias esa imagen, regenera todo con:
+
+```powershell
+pwsh assets/make-splash.ps1
+```
+
 ## 🧪 Tests
 
 ```powershell
 dotnet test
 ```
 
-Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (saneado, títulos repetidos por posición del vinilo), la limpieza de `temp`, las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
+Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto, reintento si el antivirus lo tiene abierto), la caché de discos (sobrevive a reinicios, una sola llamada aunque se pida a la vez, reintento tras un fallo, archivos rotos o de otra versión), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (`Artista - Canción`, recopilatorios, saneado, títulos repetidos por posición del vinilo), la escucha previa (argumentos de yt-dlp en m4a, caché de pistas escuchadas, formato de tiempos), la limpieza de `temp`, las carpetas numeradas y la portada (elección de la imagen principal, descarga sin token y, si hay ffmpeg en el `PATH`, incrustación real en ID3v2.3 conservando las etiquetas).
 
 ## 🏗️ Arquitectura
 
@@ -139,14 +151,15 @@ vinyl-ripper/
 │   ├── VinylRipper/            🧠 Core multiplataforma (net10.0, sin dependencias de UI)
 │   │   ├── Configuration/      AppPaths · AppSettings · SettingsStore
 │   │   ├── Security/           TokenProtector (AES-256-GCM + PBKDF2)
-│   │   ├── Discogs/            DiscogsClient · modelos
+│   │   ├── Discogs/            DiscogsClient · ReleaseDetailsCache · modelos
 │   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader · parser de progreso
-│   │   └── Ripping/            RipService · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
+│   │   ├── Ripping/            RipService · CoverArtEmbedder · TrackMatcher · OutputFolders · FileNameSanitizer
+│   │   └── Preview/            TrackPreviewService (pista en m4a para escucharla) · PreviewTime
 │   └── VinylRipper.Windows/    🪟 WPF (net10.0-windows), MVVM con CommunityToolkit.Mvvm
 │       ├── Themes/Dark.xaml    Tema oscuro completo (TreeView, ListBox, ComboBox, ScrollBar, ProgressBar…)
 │       ├── Controls/           Spinner · DarkTitleBar · converters
 │       ├── Dialogs/            DarkMessageBox · SettingsWindow
-│       └── ViewModels/         MainViewModel · SourceNode · SettingsViewModel
+│       └── ViewModels/         MainViewModel · PreviewPlayer (NAudio) · SourceNode · SettingsViewModel
 ├── tests/
 │   └── VinylRipper.Tests/      🧪 xUnit sobre el core
 ├── installer/
@@ -154,7 +167,8 @@ vinyl-ripper/
 │       ├── VinylRipper.Windows.Installer.iss   📦 script Inno Setup (por usuario, bilingüe es/en)
 │       └── build-installer.ps1                 publish + ISCC → output/VinylRipper-Setup-<ver>-win-x64.exe
 └── assets/
-    └── make-icon.ps1           🎨 genera Assets/vinyl.ico (9 tamaños) y vinyl-256.png
+    ├── make-icon.ps1           🎨 genera Assets/vinyl.ico (9 tamaños) y vinyl-256.png
+    └── make-splash.ps1         🚀 desde splash.jpg: pantalla de inicio e imágenes del instalador (images/)
 ```
 
 El core no sabe nada de WPF: un futuro `VinylRipper.Linux` (Avalonia, GTK, CLI…) sólo tiene que aportar la UI y, si quiere, su propio `IKeyMaterialProvider`.

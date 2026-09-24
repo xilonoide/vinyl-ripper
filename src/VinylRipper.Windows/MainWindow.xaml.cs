@@ -39,7 +39,7 @@ public partial class MainWindow : Window
         SizeChanged += (_, _) => _placementSaveTimer.Start();
         LocationChanged += (_, _) => _placementSaveTimer.Start();
         StateChanged += (_, _) => _placementSaveTimer.Start();
-        Closing += (_, _) => { _placementSaveTimer.Stop(); SavePlacement(); };
+        Closing += (_, _) => { _placementSaveTimer.Stop(); SavePlacement(); _vm.StopPreview(); };
 
         Loaded += async (_, _) => await _vm.InitializeAsync();
     }
@@ -105,10 +105,40 @@ public partial class MainWindow : Window
     private static T? ItemUnderMouse<T>(ListBox list, MouseButtonEventArgs e) where T : class
     {
         // Sólo reaccionamos al doble clic sobre un elemento, no sobre el hueco vacío ni las cabeceras de grupo.
+        // Pulsar dos veces seguidas el ▶ de una fila tampoco cuenta: no debe añadir ni quitar la pista.
         var source = e.OriginalSource as DependencyObject;
         while (source is not null && source is not ListBoxItem && source != list)
-            source = VisualTreeHelper.GetParent(source);
+        {
+            if (source is ButtonBase) return null;
+            source = source is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(source)
+                : LogicalTreeHelper.GetParent(source);
+        }
         return source is ListBoxItem lbi ? lbi.DataContext as T : null;
+    }
+
+    // ------------------------------------------------------------------ escucha previa: saltar en la barra
+
+    private void PreviewBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var bar = (FrameworkElement)sender;
+        bar.CaptureMouse();
+        SeekTo(bar, e);
+        e.Handled = true;
+    }
+
+    private void PreviewBar_MouseMove(object sender, MouseEventArgs e)
+    {
+        var bar = (FrameworkElement)sender;
+        if (bar.IsMouseCaptured) SeekTo(bar, e);
+    }
+
+    private void PreviewBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) =>
+        ((FrameworkElement)sender).ReleaseMouseCapture();
+
+    private void SeekTo(FrameworkElement bar, MouseEventArgs e)
+    {
+        if (bar.ActualWidth > 0) _vm.Player.Seek(e.GetPosition(bar).X / bar.ActualWidth);
     }
 
     // ------------------------------------------------------------------ posición y tamaño

@@ -1,4 +1,5 @@
 using VinylRipper.Configuration;
+using VinylRipper.Discogs;
 using VinylRipper.Security;
 using VinylRipper.YouTube;
 
@@ -11,6 +12,9 @@ namespace VinylRipper.Windows;
 public sealed record AppServices(AppPaths Paths, SettingsStore Store, TokenProtector Protector, ToolLocator Locator)
 {
     public AppSettings Settings { get; } = Store.Load();
+
+    /// <summary>Detalle de discos ya pedidos a Discogs (tracklist, vídeos, portada), guardado en disco.</summary>
+    public ReleaseDetailsCache Releases { get; } = new(Paths.ReleaseCacheDirectory);
 
     /// <summary>
     /// Guarda la configuración. Si el archivo sigue bloqueado tras los reintentos del almacén, no se

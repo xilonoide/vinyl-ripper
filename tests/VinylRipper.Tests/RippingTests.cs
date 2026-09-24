@@ -160,13 +160,28 @@ public class RipServiceNamingTests
     }
 
     [Fact]
-    public void Track_file_name_is_title_with_optional_track_artist()
+    public void Track_file_name_is_artist_dash_song()
     {
-        Assert.Equal("Sheep", RipService.BuildTrackFileName(new Track("A3", "Sheep", null, null)));
-        Assert.Equal("Nirvana - Lithium", RipService.BuildTrackFileName(new Track("B1", "Lithium", "Nirvana", null)));
-        Assert.Equal("AC_DC - T.N.T", RipService.BuildTrackFileName(new Track("B2", "T.N.T.", "AC/DC", null)));
-        // Un título que se queda vacío al sanear cae en la posición del disco.
-        Assert.Equal("A1", RipService.BuildTrackFileName(new Track("A1", "...", null, null)));
+        // Sin artista en la pista: el del disco.
+        Assert.Equal("Pink Floyd - Sheep", RipService.BuildTrackFileName("Pink Floyd", new Track("A3", "Sheep", null, null)));
+        // Con artista en la pista (recopilatorios, colaboraciones): el de la pista.
+        Assert.Equal("Nirvana - Lithium", RipService.BuildTrackFileName("Various", new Track("B1", "Lithium", "Nirvana", null)));
+        Assert.Equal("AC_DC - T.N.T", RipService.BuildTrackFileName("Various", new Track("B2", "T.N.T.", "AC/DC", null)));
+    }
+
+    [Theory]
+    [InlineData("Various")]
+    [InlineData("various")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Track_file_name_is_only_the_song_without_a_real_artist(string releaseArtist) =>
+        Assert.Equal("Dogs", RipService.BuildTrackFileName(releaseArtist, new Track("A1", "Dogs", null, null)));
+
+    [Fact]
+    public void Track_title_that_sanitizes_to_nothing_falls_back_to_vinyl_position()
+    {
+        Assert.Equal("Pink Floyd - A1", RipService.BuildTrackFileName("Pink Floyd", new Track("A1", "...", null, null)));
+        Assert.Equal("A1", RipService.BuildTrackFileName("", new Track("A1", "...", null, null)));
     }
 
     [Fact]
@@ -181,9 +196,18 @@ public class RipServiceNamingTests
             new("B2", "Final", null, null),
         ];
 
-        var names = RipService.BuildTrackFileNames(tracks);
+        var names = RipService.BuildTrackFileNames("Mercedes Peón", tracks);
 
-        Assert.Equal(["Anonim A1", "Anonim A2", "Interludio", "Anonim B1", "Final"], names);
+        Assert.Equal(
+            ["Mercedes Peón - Anonim A1", "Mercedes Peón - Anonim A2", "Mercedes Peón - Interludio", "Mercedes Peón - Anonim B1", "Mercedes Peón - Final"],
+            names);
+    }
+
+    [Fact]
+    public void Same_title_by_different_artists_is_not_a_repetition()
+    {
+        Track[] tracks = [new("A1", "Intro", "DJ Uno", null), new("B1", "Intro", "DJ Dos", null)];
+        Assert.Equal(["DJ Uno - Intro", "DJ Dos - Intro"], RipService.BuildTrackFileNames("Various", tracks));
     }
 
     [Fact]
@@ -191,7 +215,7 @@ public class RipServiceNamingTests
     {
         Track[] tracks = [new("", "Anonim", null, null), new("", "Anonim", null, null), new("", "anonim", null, null)];
 
-        var names = RipService.BuildTrackFileNames(tracks);
+        var names = RipService.BuildTrackFileNames("", tracks);
 
         Assert.Equal(["Anonim", "Anonim (2)", "anonim (3)"], names);
     }
@@ -200,7 +224,7 @@ public class RipServiceNamingTests
     public void Unique_titles_keep_plain_names()
     {
         Track[] tracks = [new("A1", "Dogs", null, null), new("A2", "Sheep", null, null)];
-        Assert.Equal(["Dogs", "Sheep"], RipService.BuildTrackFileNames(tracks));
+        Assert.Equal(["Pink Floyd - Dogs", "Pink Floyd - Sheep"], RipService.BuildTrackFileNames("Pink Floyd", tracks));
     }
 
     [Fact]

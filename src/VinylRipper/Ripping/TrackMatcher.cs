@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using VinylRipper.Discogs;
+using VinylRipper.YouTube;
 
 namespace VinylRipper.Ripping;
 
@@ -34,6 +35,18 @@ public static class TrackMatcher
 
         // Umbral: exige que casi todo el título de la pista aparezca en el título del vídeo.
         return bestScore >= 0.85 ? best : null;
+    }
+
+    /// <summary>
+    /// Qué hay que pasarle a yt-dlp para una pista: su vídeo de Discogs si lo hay y, si no, una
+    /// búsqueda en YouTube. Lo usan tanto la descarga a MP3 como la escucha previa, para que suene
+    /// exactamente lo mismo que se va a bajar.
+    /// </summary>
+    public static (string Source, Video? Video) ResolveSource(string releaseArtist, Track track,
+        IReadOnlyList<Video> videos, ISet<string>? alreadyUsed = null)
+    {
+        var video = FindVideo(track, videos, alreadyUsed);
+        return (video?.Uri ?? YtDlpDownloader.SearchUrl(BuildSearchQuery(releaseArtist, track)), video);
     }
 
     /// <summary>Consulta para buscar la pista en YouTube cuando no hay vídeo asociado.</summary>

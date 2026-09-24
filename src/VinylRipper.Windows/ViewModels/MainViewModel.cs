@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VinylRipper.Configuration;
 using VinylRipper.Discogs;
+using VinylRipper.Preview;
 using VinylRipper.Ripping;
 using VinylRipper.Windows.Dialogs;
 using VinylRipper.YouTube;
@@ -24,7 +25,6 @@ public sealed partial class MainViewModel : ObservableObject
 {
     private readonly AppServices _services;
     private readonly HttpClient _http = DiscogsClient.CreateHttpClient();
-    private readonly Dictionary<long, ReleaseDetails> _detailsCache = [];
 
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _tracksCts;
@@ -54,6 +54,8 @@ public sealed partial class MainViewModel : ObservableObject
             Selected.Add(new TrackSelection(release, new Track(t.Position, t.TrackTitle, t.TrackArtist, t.Duration), t.Index, t.TotalTracks));
         }
         Selected.CollectionChanged += Selected_CollectionChanged;
+        Player.PlaybackFailed += (title, reason) =>
+            ShowMessage?.Invoke("No se pudo reproducir", $"{title}\n\n{reason}", MessageKind.Error);
 
         UpdateStatus();
     }
@@ -344,14 +346,23 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task<ReleaseDetails> GetDetailsAsync(long releaseId, CancellationToken ct)
-    {
-        if (_detailsCache.TryGetValue(releaseId, out var cached)) return cached;
-        var token = _services.DiscogsToken ?? throw new DiscogsException("Falta el token de Discogs.");
-        var details = await new DiscogsClient(_http, token).GetReleaseAsync(releaseId, ct);
-        _detailsCache[releaseId] = details;
-        return details;
-    }
+    /// <summary>Detalle del disco: de la caché en disco si ya se pidió alguna vez; si no, de la API.</summary>
+    private Task<ReleaseDetails> GetDetailsAsync(long releaseId, CancellationToken ct) =>
+        _services.Releases.GetOrFetchAsync(releaseId, fetchCt =>
+        {
+            var token = _services.DiscogsToken ?? throw new DiscogsException("Falta el token de Discogs.");
+            return new DiscogsClient(_http, token).GetReleaseAsync(releaseId, fetchCt);
+        }, ct);
+
+    /// <summary>
+    /// Discos que ya están enteros en Seleccionados (se guardan en settings.json con su número total de
+    /// pistas): añadirlos otra vez no aporta nada, así que ni se pide su tracklist.
+    /// </summary>
+    private HashSet<long> ReleasesFullySelected() =>
+        Selected.GroupBy(s => s.Release.ReleaseId)
+            .Where(g => g.First().TotalTracks > 0 && g.Select(s => s.Index).Distinct().Count() >= g.First().TotalTracks)
+            .Select(g => g.Key)
+            .ToHashSet();
 
     private static IEnumerable<TrackSelection> ToSelections(ReleaseSummary release, ReleaseDetails details)
     {
@@ -374,7 +385,8 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task AddReleasesAsync(IList? items)
     {
         if (items is null) return;
-        var releases = items.OfType<ReleaseSummary>().ToList();
+        var complete = ReleasesFullySelected();
+        var releases = items.OfType<ReleaseSummary>().Where(r => !complete.Contains(r.ReleaseId)).ToList();
         if (releases.Count == 0) return;
 
         IsBusy = true; BusyPercent = releases.Count > 1 ? 0 : null;
@@ -459,7 +471,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (tokenChanged)
         {
-            _detailsCache.Clear();
+            // El detalle de los discos (caché en disco) no depende de la cuenta: se conserva.
             if (nowHasToken)
                 await RefreshSourcesAsync();
             else
@@ -492,25 +504,12 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             // 1. yt-dlp: si no está, se descarga a Documentos/vinyl-ripper/tools.
-            var ytDlp = _services.Locator.FindYtDlp(_services.Settings.YtDlpPath);
-            if (ytDlp is null)
-            {
-                BusyText = "Descargando yt-dlp…";
-                var installer = new YtDlpInstaller(_http, _services.Locator);
-                ytDlp = await installer.InstallAsync(new Progress<DownloadProgress>(p => BusyPercent = p.Percent), cts.Token);
-                BusyPercent = null;
-            }
+            var ytDlp = await EnsureYtDlpAsync(p => { BusyText = "Descargando yt-dlp…"; BusyPercent = p; }, cts.Token);
+            BusyPercent = null;
 
             // 2. ffmpeg: imprescindible para MP3; no lo descargamos nosotros.
-            var ffmpeg = _services.Locator.FindFfmpeg(_services.Settings.FfmpegPath);
-            if (ffmpeg is null)
-            {
-                ShowMessage?.Invoke("Falta ffmpeg",
-                    "yt-dlp necesita ffmpeg para convertir a MP3 y no lo encuentro en el PATH.\n\n" +
-                    "Instálalo con:\n    winget install Gyan.FFmpeg\n\n" +
-                    "o indica su ruta en ⚙ Configuración.", MessageKind.Warning);
-                return;
-            }
+            var ffmpeg = FindFfmpegOrWarn();
+            if (ffmpeg is null) return;
 
             // 3. Carpeta de salida numerada.
             var folder = OutputFolders.CreateNext(_services.OutputRoot);
@@ -521,7 +520,8 @@ public sealed partial class MainViewModel : ObservableObject
             var rip = new RipService(
                 new DiscogsClient(_http, token),
                 new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, _services.Settings.AudioQuality, _services.Paths.TempDirectory)),
-                new CoverArtEmbedder(ffmpeg, _services.Paths.TempDirectory));
+                new CoverArtEmbedder(ffmpeg, _services.Paths.TempDirectory),
+                _services.Releases);
 
             var progress = new Progress<RipProgress>(p =>
             {
@@ -569,6 +569,118 @@ public sealed partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void CancelDownload() => _downloadCts?.Cancel();
+
+    // ------------------------------------------------------------------ herramientas
+
+    /// <summary>Instalación de yt-dlp en curso, compartida entre la descarga y la escucha.</summary>
+    private Task<string>? _ytDlpInstall;
+
+    /// <summary>Ruta de yt-dlp; si no está, lo descarga a Documentos/vinyl-ripper/tools.</summary>
+    private async Task<string> EnsureYtDlpAsync(Action<double?>? onInstallProgress, CancellationToken ct)
+    {
+        var found = _services.Locator.FindYtDlp(_services.Settings.YtDlpPath);
+        if (found is not null) return found;
+
+        if (_ytDlpInstall is null)
+        {
+            onInstallProgress?.Invoke(null);
+            var installer = new YtDlpInstaller(_http, _services.Locator);
+            _ytDlpInstall = installer.InstallAsync(new Progress<DownloadProgress>(p => onInstallProgress?.Invoke(p.Percent)), CancellationToken.None);
+        }
+        try
+        {
+            return await _ytDlpInstall.WaitAsync(ct);
+        }
+        catch (Exception) when (_ytDlpInstall is { IsFaulted: true })
+        {
+            _ytDlpInstall = null; // que el siguiente intento vuelva a probar
+            throw;
+        }
+    }
+
+    /// <summary>Ruta de ffmpeg, o null tras avisar de cómo instalarlo.</summary>
+    private string? FindFfmpegOrWarn()
+    {
+        var ffmpeg = _services.Locator.FindFfmpeg(_services.Settings.FfmpegPath);
+        if (ffmpeg is null)
+        {
+            ShowMessage?.Invoke("Falta ffmpeg",
+                "yt-dlp necesita ffmpeg para convertir el audio y no lo encuentro en el PATH.\n\n" +
+                "Instálalo con:\n    winget install Gyan.FFmpeg\n\n" +
+                "o indica su ruta en ⚙ Configuración.", MessageKind.Warning);
+        }
+        return ffmpeg;
+    }
+
+    // ------------------------------------------------------------------ escucha previa
+
+    public PreviewPlayer Player { get; } = new();
+
+    private CancellationTokenSource? _previewCts;
+
+    /// <summary>
+    /// ▶ / ■ de una pista. Si es la que suena (o se está preparando), la para; si no, para lo que
+    /// sonara, baja la pista a temp/previews (spinner mientras tanto) y la reproduce. No depende de
+    /// <see cref="IsBusy"/>: se puede escuchar mientras se descarga.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task TogglePreviewAsync(TrackSelection? track)
+    {
+        if (track is null) return;
+
+        var wasCurrent = Player.IsActive && Player.IsCurrent(track);
+        _previewCts?.Cancel();
+        _previewCts = null;
+        Player.Stop();
+        if (wasCurrent) return;
+
+        var cts = _previewCts = new CancellationTokenSource();
+        Player.BeginLoading(track);
+        bool StillCurrent() => !cts.IsCancellationRequested && Player.IsCurrent(track);
+
+        try
+        {
+            var ytDlp = await EnsureYtDlpAsync(null, cts.Token);
+            var ffmpeg = FindFfmpegOrWarn();
+            if (ffmpeg is null)
+            {
+                if (StillCurrent()) Player.Stop();
+                return;
+            }
+
+            // Los mismos vídeos de Discogs que usaría la descarga; sin ellos, búsqueda en YouTube.
+            IReadOnlyList<Video> videos = [];
+            try { videos = (await GetDetailsAsync(track.Release.ReleaseId, cts.Token)).Videos; }
+            catch (DiscogsException) { }
+
+            var previews = new TrackPreviewService(
+                new YtDlpDownloader(new YtDlpOptions(ytDlp, ffmpeg, TempDirectory: _services.Paths.TempDirectory)),
+                Path.Combine(_services.Paths.TempDirectory, "previews"));
+            var path = await previews.GetAsync(track, videos, ct: cts.Token);
+
+            if (StillCurrent()) Player.Play(path);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is YtDlpException or HttpRequestException or IOException or UnauthorizedAccessException)
+        {
+            if (!StillCurrent()) return;
+            Player.Stop();
+            ShowMessage?.Invoke("No se pudo reproducir", $"{track.Track.Title}\n\n{ex.Message}", MessageKind.Error);
+        }
+        finally
+        {
+            if (ReferenceEquals(_previewCts, cts)) _previewCts = null;
+        }
+    }
+
+    /// <summary>Para la escucha o cancela la que se está preparando (■ de la tira y cierre de la ventana).</summary>
+    [RelayCommand]
+    public void StopPreview()
+    {
+        _previewCts?.Cancel();
+        _previewCts = null;
+        Player.Stop();
+    }
 
     [RelayCommand]
     private void OpenOutputFolder()
