@@ -45,6 +45,7 @@
 
     <!-- ===================== Window ===================== -->
     <Style x:Key="DarkWindow" TargetType="Window">
+        <Setter Property="Icon" Value="pack://application:,,,/Assets/vinyl.ico" />
         <Setter Property="Background" Value="{StaticResource Brush.Background}" />
         <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
         <Setter Property="FontFamily" Value="Segoe UI" />

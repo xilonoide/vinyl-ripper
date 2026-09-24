@@ -14,6 +14,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\vinyl.ico</ApplicationIcon>
+    <AssemblyTitle>Vinyl Ripper</AssemblyTitle>
+    <Product>Vinyl Ripper</Product>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\vinyl.ico" />
+  </ItemGroup>
 
 </Project>

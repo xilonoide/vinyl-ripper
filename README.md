@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎧 Vinyl Ripper
+<img src="assets/vinyl-256.png" width="128" alt="Vinyl Ripper" />
+
+# Vinyl Ripper
 
 **Convierte tu colección de Discogs en MP3 con un par de clics.**
 
@@ -125,8 +127,10 @@ vinyl-ripper/
 │       ├── Controls/           Spinner · DarkTitleBar · converters
 │       ├── Dialogs/            DarkMessageBox · SettingsWindow
 │       └── ViewModels/         MainViewModel · SourceNode · SettingsViewModel
-└── tests/
-    └── VinylRipper.Tests/      🧪 xUnit sobre el core
+├── tests/
+│   └── VinylRipper.Tests/      🧪 xUnit sobre el core
+└── assets/
+    └── make-icon.ps1           🎨 genera Assets/vinyl.ico (9 tamaños) y vinyl-256.png
 ```
 
 El core no sabe nada de WPF: un futuro `VinylRipper.Linux` (Avalonia, GTK, CLI…) sólo tiene que aportar la UI y, si quiere, su propio `IKeyMaterialProvider`.
