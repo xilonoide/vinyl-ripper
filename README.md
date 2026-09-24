@@ -26,8 +26,10 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | 🗂 **Tres niveles** | Árbol de fuentes (Colección → carpetas, Deseados, Inventario, Listas → listas) → discos → pistas. |
 | ✅ **Selección acumulativa** | Marca discos completos o pistas sueltas con Ctrl / Shift + clic, pásalos a *Seleccionados* (agrupados por disco) y sigue añadiendo desde otras carpetas o listas. |
 | 🎵 **Vídeos de Discogs primero** | Si la edición tiene vídeos de YouTube asociados en Discogs se usan esos; si no, se busca `artista + pista`. |
-| 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`. |
-| 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso con pista actual / total cuando se conoce. |
+| 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`; desde ⚙ se actualiza con un clic. |
+| 🧹 **Sin basura** | Los intermedios de yt-dlp (`.webm`, `.part`…) van a `Documentos/vinyl-ripper/temp`, que se vacía en cada arranque; en la carpeta del disco sólo aparecen MP3. |
+| 🏷 **Nombres limpios** | Cada MP3 se llama como la pista, sin numerar. Si varios cortes comparten título se distinguen por su posición en el vinilo (`Anonim A1`, `Anonim A2`…). |
+| 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso por pista (el total se conoce desde el principio). |
 | 💾 **Todo se recuerda** | Lista elegida, filtro, discos seleccionados, tamaño y posición de ventana… se guardan a cada cambio. |
 | 🌙 **Modo oscuro de verdad** | Desplegables, listas, hovers, scrollbars, tooltips, diálogos y hasta la barra de título nativa. |
 | ❌ **Sin botones de cerrar** | Ventanas y diálogos se cierran con la X. Sin confirmación al salir. |
@@ -126,7 +128,7 @@ El script lee la versión del csproj, hace `dotnet publish` (win-x64, self-conta
 dotnet test
 ```
 
-Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, el parser de progreso de yt-dlp, los nombres de archivo y las carpetas numeradas.
+Cubren el cifrado (ida y vuelta, manipulación, clave distinta), el almacén de configuración (guardado atómico, archivo corrupto), el cliente Discogs contra un `HttpMessageHandler` falso (cabeceras, paginación, 401, reintento en 429, parseo de tracklists), el emparejado pista ↔ vídeo, los argumentos y el parser de progreso de yt-dlp (rutas `home`/`temp`), los nombres de archivo (saneado, títulos repetidos por posición del vinilo), la limpieza de `temp` y las carpetas numeradas.
 
 ## 🏗️ Arquitectura
 
