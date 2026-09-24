@@ -127,4 +127,51 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.DoesNotContain("encryptedDiscogsToken", json);
         Assert.Contains("audioQuality", json);
     }
+
+    /// <summary>
+    /// Lo que hace un antivirus al analizar el archivo recién escrito: lo abre sin permitir borrarlo ni
+    /// renombrar encima. Mientras está abierto, File.Move da "Access to the path is denied".
+    /// </summary>
+    private FileStream HoldOpenLikeAnAntivirus() =>
+        new(_paths.SettingsFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+    [Fact]
+    public async Task Save_waits_for_a_briefly_locked_file()
+    {
+        var store = new SettingsStore(_paths);
+        store.Save(new AppSettings { SearchFilter = "antes" });
+
+        var handle = HoldOpenLikeAnAntivirus();
+        var release = Task.Delay(150).ContinueWith(_ => handle.Dispose());
+
+        store.Save(new AppSettings { SearchFilter = "después" });
+        await release;
+
+        Assert.Equal("después", store.Load().SearchFilter);
+        Assert.False(File.Exists(_paths.SettingsFile + ".tmp"));
+    }
+
+    [Fact]
+    public void Save_gives_up_on_a_file_that_stays_locked_and_keeps_the_previous_one()
+    {
+        var store = new SettingsStore(_paths);
+        store.Save(new AppSettings { SearchFilter = "antes" });
+
+        using (HoldOpenLikeAnAntivirus())
+        {
+            var ex = Record.Exception(() => store.Save(new AppSettings { SearchFilter = "después" }));
+            Assert.True(ex is UnauthorizedAccessException or IOException, $"Excepción inesperada: {ex}");
+        }
+
+        Assert.Equal("antes", store.Load().SearchFilter);
+    }
+
+    [Fact]
+    public void Retry_delays_grow_and_are_capped()
+    {
+        var delays = Enumerable.Range(1, SettingsStore.SaveAttempts - 1).Select(a => SettingsStore.RetryDelay(a).TotalMilliseconds).ToList();
+
+        Assert.Equal([25, 50, 100, 200, 400, 400, 400], delays);
+        Assert.True(delays.Sum() < 2000);
+    }
 }

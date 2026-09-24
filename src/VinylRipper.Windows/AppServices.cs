@@ -12,7 +12,22 @@ public sealed record AppServices(AppPaths Paths, SettingsStore Store, TokenProte
 {
     public AppSettings Settings { get; } = Store.Load();
 
-    public void Save() => Store.Save(Settings);
+    /// <summary>
+    /// Guarda la configuración. Si el archivo sigue bloqueado tras los reintentos del almacén, no se
+    /// interrumpe lo que estuviera haciendo el usuario: todo el estado vive en memoria y cada guardado
+    /// lo escribe entero, así que el siguiente cambio (o el cierre de la ventana) lo vuelve a intentar.
+    /// </summary>
+    public void Save()
+    {
+        try
+        {
+            Store.Save(Settings);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine($"No se pudo guardar {Store.FilePath}: {ex.Message}");
+        }
+    }
 
     /// <summary>Token de Discogs en claro, o null si no hay o no se puede descifrar (otra máquina/usuario).</summary>
     public string? DiscogsToken => Protector.TryUnprotect(Settings.EncryptedDiscogsToken);

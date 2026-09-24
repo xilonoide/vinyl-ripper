@@ -30,6 +30,8 @@ public sealed partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _tracksCts;
     private CancellationTokenSource? _downloadCts;
     private bool _restoringState;
+    /// <summary>Mientras se añaden o quitan pistas en bloque, se guarda una sola vez al final.</summary>
+    private bool _batchingSelection;
 
     public MainViewModel(AppServices services)
     {
@@ -140,6 +142,12 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private void Selected_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!_batchingSelection) OnSelectionChanged();
+    }
+
+    /// <summary>Persiste la selección entera y refresca botones y estado.</summary>
+    private void OnSelectionChanged()
     {
         _services.Settings.SelectedTracks = Selected.Select(s => new SavedTrack
         {
@@ -404,17 +412,34 @@ public sealed partial class MainViewModel : ObservableObject
     private void AddUnique(IEnumerable<TrackSelection> tracks)
     {
         var known = Selected.Select(s => s.Key).ToHashSet();
-        foreach (var t in tracks)
-            if (known.Add(t.Key))
-                Selected.Add(t);
+        var changed = false;
+        _batchingSelection = true;
+        try
+        {
+            foreach (var t in tracks)
+                if (known.Add(t.Key))
+                {
+                    Selected.Add(t);
+                    changed = true;
+                }
+        }
+        finally { _batchingSelection = false; }
+        if (changed) OnSelectionChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanAct))]
     private void RemoveFromSelected(IList? items)
     {
         if (items is null) return;
-        foreach (var t in items.OfType<TrackSelection>().ToList())
-            Selected.Remove(t);
+        var changed = false;
+        _batchingSelection = true;
+        try
+        {
+            foreach (var t in items.OfType<TrackSelection>().ToList())
+                changed |= Selected.Remove(t);
+        }
+        finally { _batchingSelection = false; }
+        if (changed) OnSelectionChanged();
     }
 
     private bool CanClearSelected() => !IsBusy && Selected.Count > 0;

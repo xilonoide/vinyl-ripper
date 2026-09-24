@@ -48,14 +48,36 @@ public sealed class SettingsStore
         }
     }
 
+    /// <summary>Intentos de guardado antes de rendirse (~1,5 s en total en el peor caso).</summary>
+    internal const int SaveAttempts = 8;
+
     public void Save(AppSettings settings)
     {
         lock (_gate)
         {
             _paths.EnsureCreated();
+            var json = JsonSerializer.Serialize(settings, JsonOptions);
             var tmp = _paths.SettingsFile + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(settings, JsonOptions));
-            File.Move(tmp, _paths.SettingsFile, overwrite: true);
+
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.WriteAllText(tmp, json);
+                    File.Move(tmp, _paths.SettingsFile, overwrite: true);
+                    return;
+                }
+                catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < SaveAttempts)
+                {
+                    // Un antivirus o el indexador de Windows abre un instante el archivo recién escrito
+                    // para analizarlo; mientras lo tiene abierto, renombrar encima da "Access denied".
+                    Thread.Sleep(RetryDelay(attempt));
+                }
+            }
         }
     }
+
+    /// <summary>25, 50, 100, 200, 400, 400… ms.</summary>
+    internal static TimeSpan RetryDelay(int attempt) =>
+        TimeSpan.FromMilliseconds(Math.Min(400, 25 * (1 << Math.Min(attempt - 1, 4))));
 }
