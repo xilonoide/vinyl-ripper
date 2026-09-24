@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VinylRipper.Windows/VinylRipper.Windows.csproj" />
+    <Project Path="src/VinylRipper/VinylRipper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VinylRipper.Tests/VinylRipper.Tests.csproj" />
+  </Folder>
+</Solution>

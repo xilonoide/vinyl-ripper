@@ -1,0 +1,34 @@
+# Build
+bin/
+obj/
+out/
+publish/
+*.binlog
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*.DotSettings.user
+
+# Test / coverage
+TestResults/
+coverage*.xml
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local settings (la app guarda la config real en Documentos/vinyl-ripper)
+settings.json
+*.local.json

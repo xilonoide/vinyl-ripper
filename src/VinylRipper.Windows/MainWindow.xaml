@@ -1,0 +1,172 @@
+<Window x:Class="VinylRipper.Windows.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:VinylRipper.Windows.ViewModels"
+        xmlns:c="clr-namespace:VinylRipper.Windows.Controls"
+        xmlns:discogs="clr-namespace:VinylRipper.Discogs;assembly=VinylRipper"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance vm:MainViewModel}"
+        Style="{StaticResource DarkWindow}"
+        Title="Vinyl Ripper"
+        MinWidth="900" MinHeight="560">
+    <Window.Resources>
+        <c:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <c:BoolToVisibilityConverter x:Key="BoolToVisInv" Invert="True" />
+        <c:NullToVisibilityConverter x:Key="NullToVis" />
+        <c:NullToVisibilityConverter x:Key="NullToVisInv" Invert="True" />
+        <c:UrlToImageConverter x:Key="UrlToImage" />
+
+        <DataTemplate x:Key="ReleaseTemplate" DataType="{x:Type discogs:ReleaseSummary}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Width="44" Height="44" Background="{StaticResource Brush.SurfaceRaised}" CornerRadius="3" Margin="0,0,10,0">
+                    <Grid>
+                        <TextBlock Text="♪" FontSize="18" Foreground="{StaticResource Brush.TextDisabled}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Image Source="{Binding Thumb, Converter={StaticResource UrlToImage}, IsAsync=True}" Stretch="UniformToFill" />
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Artist}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Title}" />
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11">
+                        <Run Text="{Binding Year, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Format, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== Barra superior ===== -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Lista de Discogs" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <ComboBox Grid.Column="1" Width="320" ItemsSource="{Binding Lists}" SelectedItem="{Binding SelectedList}"
+                      DisplayMemberPath="DisplayName" IsEnabled="{Binding HasToken}" />
+            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="↻" ToolTip="Recargar listas"
+                    Command="{Binding RefreshListsCommand}" Margin="6,0,0,0" />
+
+            <Grid Grid.Column="4" Width="260" Margin="0,0,8,0">
+                <TextBox Text="{Binding SearchFilter, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Text="Filtrar por artista, título, año…" Style="{StaticResource Muted}" IsHitTestVisible="False"
+                           Margin="10,0,0,0" VerticalAlignment="Center"
+                           Visibility="{Binding SearchFilter, Converter={StaticResource NullToVisInv}}" />
+            </Grid>
+            <Button Grid.Column="5" Style="{StaticResource IconButton}" Content="⚙" ToolTip="Configuración"
+                    Command="{Binding OpenSettingsCommand}" />
+        </Grid>
+
+        <!-- ===== Contenido ===== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Discos de la lista -->
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Style="{StaticResource Heading}">
+                        <Run Text="Discos" /><Run Text=" (" /><Run Text="{Binding VisibleReleaseCount, Mode=OneWay}" /><Run Text=")" />
+                    </TextBlock>
+                    <ListBox x:Name="ReleasesList" Grid.Row="1" ItemsSource="{Binding ReleasesView}"
+                             ItemTemplate="{StaticResource ReleaseTemplate}" SelectionMode="Extended"
+                             MouseDoubleClick="ReleasesList_MouseDoubleClick" />
+                    <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320" IsHitTestVisible="False"
+                               Visibility="{Binding HasToken, Converter={StaticResource BoolToVisInv}}">
+                        Añade tu token de Discogs en ⚙ Configuración para ver tus listas.
+                    </TextBlock>
+                </Grid>
+            </Border>
+
+            <!-- Botones centrales -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                <Button Content="Añadir ➜" MinWidth="110" Margin="0,0,0,8" ToolTip="Añadir los discos marcados a la lista de seleccionados"
+                        Command="{Binding AddToSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=ReleasesList}" />
+                <Button Content="⬅ Quitar" MinWidth="110" Margin="0,0,0,8" ToolTip="Quitar de seleccionados"
+                        Command="{Binding RemoveFromSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=SelectedList}" />
+                <Button Content="Vaciar" MinWidth="110" Command="{Binding ClearSelectedCommand}" />
+            </StackPanel>
+
+            <!-- Seleccionados -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Style="{StaticResource Heading}">
+                        <Run Text="Seleccionados" /><Run Text=" (" /><Run Text="{Binding Selected.Count, Mode=OneWay}" /><Run Text=")" />
+                    </TextBlock>
+                    <ListBox x:Name="SelectedList" Grid.Row="1" ItemsSource="{Binding Selected}"
+                             ItemTemplate="{StaticResource ReleaseTemplate}" SelectionMode="Extended"
+                             MouseDoubleClick="SelectedList_MouseDoubleClick" />
+                    <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320" IsHitTestVisible="False"
+                               Visibility="{Binding Selected.Count, Converter={StaticResource NullToVisInv}}">
+                        Selecciona discos a la izquierda (Ctrl / Shift + clic) y pulsa «Añadir». Puedes ir acumulando de varias listas.
+                    </TextBlock>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===== Pie: acciones + progreso ===== -->
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Style="{StaticResource AccentButton}" Content="⬇  Descargar MP3" MinWidth="160"
+                    Command="{Binding DownloadCommand}" />
+            <Button Grid.Column="1" Content="Cancelar" Margin="8,0,0,0" Command="{Binding CancelDownloadCommand}"
+                    Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}" />
+            <Button Grid.Column="2" Content="📂  Abrir carpeta de salida" Margin="8,0,0,0" Command="{Binding OpenOutputFolderCommand}" />
+
+            <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <c:Spinner Margin="0,0,10,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{Binding BusyText}" Style="{StaticResource Muted}" VerticalAlignment="Center" MaxWidth="600"
+                           Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                           Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisInv}}" />
+            </StackPanel>
+
+            <ProgressBar Grid.Row="1" Grid.ColumnSpan="4" Margin="0,10,0,0" Minimum="0" Maximum="100"
+                         Value="{Binding BusyPercent, Mode=OneWay, TargetNullValue=0}"
+                         IsIndeterminate="{Binding IsProgressIndeterminate}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+        </Grid>
+    </Grid>
+</Window>

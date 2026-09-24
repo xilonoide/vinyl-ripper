@@ -1,0 +1,126 @@
+<Window x:Class="VinylRipper.Windows.Dialogs.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:VinylRipper.Windows.ViewModels"
+        xmlns:c="clr-namespace:VinylRipper.Windows.Controls"
+        d:DataContext="{d:DesignInstance vm:SettingsViewModel}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Style="{StaticResource DarkWindow}"
+        Title="Configuración"
+        Width="640" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <c:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <c:BoolToVisibilityConverter x:Key="BoolToVisInv" Invert="True" />
+        <c:NullToVisibilityConverter x:Key="NullToVis" />
+        <c:InverseBoolConverter x:Key="Not" />
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Margin" Value="0,12,0,4" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="20,10,20,20" IsEnabled="{Binding IsBusy, Converter={StaticResource Not}}">
+
+        <!-- Discogs -->
+        <TextBlock Style="{StaticResource Heading}" Margin="0,8,0,0">Discogs</TextBlock>
+        <TextBlock Style="{StaticResource FieldLabel}" Margin="0,4,0,4">Token personal</TextBlock>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <PasswordBox x:Name="TokenBox" Grid.Column="0"
+                         Visibility="{Binding ShowToken, Converter={StaticResource BoolToVisInv}}"
+                         PasswordChanged="TokenBox_PasswordChanged" />
+            <TextBox Grid.Column="0" Text="{Binding DiscogsToken, UpdateSourceTrigger=PropertyChanged}"
+                     Visibility="{Binding ShowToken, Converter={StaticResource BoolToVis}}" />
+            <CheckBox Grid.Column="1" Margin="10,0,0,0" IsChecked="{Binding ShowToken}" Content="Mostrar" />
+            <Button Grid.Column="2" Margin="10,0,0,0" Content="Probar" Command="{Binding TestTokenCommand}" />
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}">
+            Se genera en discogs.com → Settings → Developers → Generate new token. Se guarda cifrado (AES-256) en settings.json.
+        </TextBlock>
+        <TextBlock Text="{Binding TokenStatus}" Margin="0,6,0,0" TextWrapping="Wrap"
+                   Visibility="{Binding TokenStatus, Converter={StaticResource NullToVis}}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                    <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding TokenStatusIsError}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Brush.Error}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Salida -->
+        <TextBlock Style="{StaticResource Heading}" Margin="0,20,0,0">Salida</TextBlock>
+        <TextBlock Style="{StaticResource FieldLabel}" Margin="0,4,0,4">Carpeta raíz de descargas</TextBlock>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Text="{Binding OutputRoot, UpdateSourceTrigger=PropertyChanged}" />
+            <Button Grid.Column="1" Margin="10,0,0,0" Content="Elegir…" Click="BrowseOutput_Click" />
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}">
+            <Run>Vacío = </Run><Run Text="{Binding DefaultOutputRoot, Mode=OneWay}" /><Run>. Cada descarga crea dentro una subcarpeta numerada.</Run>
+        </TextBlock>
+
+        <TextBlock Style="{StaticResource FieldLabel}">Calidad MP3</TextBlock>
+        <ComboBox ItemsSource="{Binding AudioQualities}" SelectedItem="{Binding AudioQuality}" DisplayMemberPath="Label" Width="280" HorizontalAlignment="Left" />
+
+        <!-- Herramientas -->
+        <TextBlock Style="{StaticResource Heading}" Margin="0,20,0,0">Herramientas</TextBlock>
+        <TextBlock Style="{StaticResource FieldLabel}" Margin="0,4,0,4">yt-dlp</TextBlock>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Text="{Binding YtDlpPath, UpdateSourceTrigger=PropertyChanged}" />
+            <Button Grid.Column="1" Margin="10,0,0,0" Content="Elegir…" Click="BrowseYtDlp_Click" />
+            <Button Grid.Column="2" Margin="10,0,0,0" Content="Descargar / actualizar" Command="{Binding InstallYtDlpCommand}" />
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}">
+            <Run>Vacío = autodetectar. Ahora mismo: </Run><Run Text="{Binding DetectedYtDlp, Mode=OneWay, TargetNullValue='no encontrado (se descargará solo al primer uso)'}" />
+        </TextBlock>
+
+        <TextBlock Style="{StaticResource FieldLabel}">ffmpeg</TextBlock>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Text="{Binding FfmpegPath, UpdateSourceTrigger=PropertyChanged}" />
+            <Button Grid.Column="1" Margin="10,0,0,0" Content="Elegir…" Click="BrowseFfmpeg_Click" />
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}">
+            <Run>Necesario para convertir a MP3. Vacío = buscar en PATH. Ahora mismo: </Run><Run Text="{Binding DetectedFfmpeg, Mode=OneWay, TargetNullValue='no encontrado — instala con: winget install Gyan.FFmpeg'}" />
+        </TextBlock>
+
+        <!-- Ocupado -->
+        <StackPanel Margin="0,20,0,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+                <c:Spinner Width="16" Height="16" Margin="0,0,10,0" />
+                <TextBlock Text="{Binding BusyText}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+            </StackPanel>
+            <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100" Value="{Binding BusyPercent, Mode=OneWay, TargetNullValue=0}"
+                         Visibility="{Binding BusyPercent, Converter={StaticResource NullToVis}}" />
+        </StackPanel>
+    </StackPanel>
+</Window>

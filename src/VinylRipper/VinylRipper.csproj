@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VinylRipper</RootNamespace>
+    <AssemblyName>VinylRipper</AssemblyName>
+    <Description>Núcleo multiplataforma de Vinyl Ripper: configuración cifrada, cliente Discogs y descarga de audio con yt-dlp.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VinylRipper.Tests" />
+  </ItemGroup>
+
+</Project>
