@@ -76,6 +76,8 @@ Documentos/
             └── …
 ```
 
+Cada MP3 se llama como la pista. Si varias pistas del disco comparten título (cortes sin nombre, «Anonim», «Untitled»…), se distinguen con su posición en el vinilo: `Anonim A1.mp3`, `Anonim A2.mp3`, `Anonim B1.mp3`.
+
 La carpeta raíz de salida y la calidad MP3 se cambian en ⚙.
 
 ## 🧰 Requisitos

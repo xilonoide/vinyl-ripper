@@ -67,12 +67,14 @@ public sealed class RipService
             catch (DiscogsException) { /* seguimos con búsqueda */ }
 
             var usedVideos = new HashSet<string>();
-            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var sel in group.OrderBy(t => t.Index))
+            var ordered = group.OrderBy(t => t.Index).ToList();
+            var fileNames = BuildTrackFileNames(ordered.Select(t => t.Track).ToList());
+            for (var i = 0; i < ordered.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                var sel = ordered[i];
                 var track = sel.Track;
-                var fileName = UniqueName(BuildTrackFileName(track), usedNames);
+                var fileName = fileNames[i];
                 var video = TrackMatcher.FindVideo(track, videos, usedVideos);
                 var source = video?.Uri ?? YtDlpDownloader.SearchUrl(TrackMatcher.BuildSearchQuery(release.Artist, track));
                 if (video is not null) usedVideos.Add(video.Uri);
@@ -114,7 +116,34 @@ public sealed class RipService
         return FileNameSanitizer.Sanitize(title, fallback: string.IsNullOrEmpty(track.Position) ? "pista" : track.Position);
     }
 
-    /// <summary>Evita que dos pistas con el mismo título dentro de un disco se pisen: "Intro", "Intro (2)"…</summary>
+    /// <summary>
+    /// Nombres de archivo para las pistas de un disco, en el mismo orden. Si varias comparten título
+    /// (p. ej. un disco con todos los cortes llamados "Anonim") se distinguen con su posición en el
+    /// vinilo: "Anonim A1", "Anonim A2", "Anonim B1"… Sin posición, o si aun así coinciden, se añade " (2)", " (3)"…
+    /// </summary>
+    internal static IReadOnlyList<string> BuildTrackFileNames(IReadOnlyList<Track> tracks)
+    {
+        var baseNames = tracks.Select(BuildTrackFileName).ToList();
+        var repeated = baseNames
+            .GroupBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>(tracks.Count);
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            var name = baseNames[i];
+            var position = tracks[i].Position.Trim();
+            if (repeated.Contains(name) && position.Length > 0)
+                name = FileNameSanitizer.Sanitize($"{name} {position}", fallback: position);
+            result.Add(UniqueName(name, used));
+        }
+        return result;
+    }
+
+    /// <summary>Último recurso contra colisiones: "Intro", "Intro (2)", "Intro (3)"…</summary>
     internal static string UniqueName(string name, ISet<string> used)
     {
         var candidate = name;

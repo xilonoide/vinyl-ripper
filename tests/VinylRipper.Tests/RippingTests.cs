@@ -170,6 +170,40 @@ public class RipServiceNamingTests
     }
 
     [Fact]
+    public void Repeated_titles_are_distinguished_by_vinyl_position()
+    {
+        Track[] tracks =
+        [
+            new("A1", "Anonim", null, null),
+            new("A2", "Anonim", null, null),
+            new("A3", "Interludio", null, null),
+            new("B1", "Anonim", null, null),
+            new("B2", "Final", null, null),
+        ];
+
+        var names = RipService.BuildTrackFileNames(tracks);
+
+        Assert.Equal(["Anonim A1", "Anonim A2", "Interludio", "Anonim B1", "Final"], names);
+    }
+
+    [Fact]
+    public void Repeated_titles_without_position_fall_back_to_numeric_suffix()
+    {
+        Track[] tracks = [new("", "Anonim", null, null), new("", "Anonim", null, null), new("", "anonim", null, null)];
+
+        var names = RipService.BuildTrackFileNames(tracks);
+
+        Assert.Equal(["Anonim", "Anonim (2)", "anonim (3)"], names);
+    }
+
+    [Fact]
+    public void Unique_titles_keep_plain_names()
+    {
+        Track[] tracks = [new("A1", "Dogs", null, null), new("A2", "Sheep", null, null)];
+        Assert.Equal(["Dogs", "Sheep"], RipService.BuildTrackFileNames(tracks));
+    }
+
+    [Fact]
     public void Duplicate_track_titles_get_a_numeric_suffix()
     {
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
