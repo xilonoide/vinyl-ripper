@@ -10,7 +10,7 @@
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Style="{StaticResource DarkWindow}"
         Title="Vinyl Ripper"
-        MinWidth="900" MinHeight="560">
+        MinWidth="1000" MinHeight="600">
     <Window.Resources>
         <c:BoolToVisibilityConverter x:Key="BoolToVis" />
         <c:BoolToVisibilityConverter x:Key="BoolToVisInv" Invert="True" />
@@ -18,6 +18,21 @@
         <c:NullToVisibilityConverter x:Key="NullToVisInv" Invert="True" />
         <c:UrlToImageConverter x:Key="UrlToImage" />
 
+        <!-- Nivel 1: nodo del árbol de fuentes -->
+        <HierarchicalDataTemplate x:Key="SourceTemplate" DataType="{x:Type vm:SourceNode}" ItemsSource="{Binding Children}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Glyph}" Width="22" TextAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" />
+                <TextBlock Grid.Column="2" Text="{Binding CountText}" Style="{StaticResource Muted}" FontSize="11" Margin="8,0,4,0" />
+            </Grid>
+        </HierarchicalDataTemplate>
+
+        <!-- Nivel 2: disco -->
         <DataTemplate x:Key="ReleaseTemplate" DataType="{x:Type discogs:ReleaseSummary}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -40,6 +55,24 @@
                 </StackPanel>
             </Grid>
         </DataTemplate>
+
+        <!-- Nivel 3 y seleccionados: pista -->
+        <DataTemplate x:Key="TrackTemplate" DataType="{x:Type discogs:TrackSelection}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="36" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding DisplayPosition}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Track.Title}" />
+                    <TextBlock Text="{Binding Track.Artist}" Style="{StaticResource Muted}" FontSize="11"
+                               Visibility="{Binding Track.Artist, Converter={StaticResource NullToVis}}" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{Binding Track.Duration}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </Grid>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid Margin="16">
@@ -53,85 +86,151 @@
         <Grid Grid.Row="0" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text="Lista de Discogs" VerticalAlignment="Center" Margin="0,0,10,0" />
-            <ComboBox Grid.Column="1" Width="320" ItemsSource="{Binding Lists}" SelectedItem="{Binding SelectedList}"
-                      DisplayMemberPath="DisplayName" IsEnabled="{Binding HasToken}" />
-            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="↻" ToolTip="Recargar listas"
-                    Command="{Binding RefreshListsCommand}" Margin="6,0,0,0" />
+            <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center">🎧 Vinyl Ripper</TextBlock>
 
-            <Grid Grid.Column="4" Width="260" Margin="0,0,8,0">
+            <Grid Grid.Column="2" Width="280" Margin="0,0,8,0">
                 <TextBox Text="{Binding SearchFilter, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock Text="Filtrar por artista, título, año…" Style="{StaticResource Muted}" IsHitTestVisible="False"
+                <TextBlock Text="Filtrar discos por artista, título, año…" Style="{StaticResource Muted}" IsHitTestVisible="False"
                            Margin="10,0,0,0" VerticalAlignment="Center"
                            Visibility="{Binding SearchFilter, Converter={StaticResource NullToVisInv}}" />
             </Grid>
-            <Button Grid.Column="5" Style="{StaticResource IconButton}" Content="⚙" ToolTip="Configuración"
+            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="⚙" ToolTip="Configuración"
                     Command="{Binding OpenSettingsCommand}" />
         </Grid>
 
-        <!-- ===== Contenido ===== -->
+        <!-- ===== Contenido: fuente | discos + pistas | botones | seleccionados ===== -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SourceColumn" Width="0.6*" MinWidth="180" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="260" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="260" />
             </Grid.ColumnDefinitions>
 
-            <!-- Discos de la lista -->
+            <!-- Nivel 1: fuente -->
             <Border Grid.Column="0" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Style="{StaticResource Heading}">
-                        <Run Text="Discos" /><Run Text=" (" /><Run Text="{Binding VisibleReleaseCount, Mode=OneWay}" /><Run Text=")" />
-                    </TextBlock>
-                    <ListBox x:Name="ReleasesList" Grid.Row="1" ItemsSource="{Binding ReleasesView}"
-                             ItemTemplate="{StaticResource ReleaseTemplate}" SelectionMode="Extended"
-                             MouseDoubleClick="ReleasesList_MouseDoubleClick" />
+                    <Grid>
+                        <TextBlock Style="{StaticResource Heading}" Text="Fuente" />
+                        <Button Style="{StaticResource IconButton}" Content="↻" ToolTip="Recargar listas de Discogs" FontSize="13"
+                                Padding="4,0" MinHeight="22" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,0,0"
+                                Command="{Binding RefreshSourcesCommand}" />
+                    </Grid>
+                    <TreeView x:Name="SourceTree" Grid.Row="1" ItemsSource="{Binding Sources}"
+                              ItemTemplate="{StaticResource SourceTemplate}"
+                              SelectedItemChanged="SourceTree_SelectedItemChanged" />
                     <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320" IsHitTestVisible="False"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="12" IsHitTestVisible="False"
                                Visibility="{Binding HasToken, Converter={StaticResource BoolToVisInv}}">
-                        Añade tu token de Discogs en ⚙ Configuración para ver tus listas.
+                        Añade tu token de Discogs en ⚙ para ver tu colección, deseados, inventario y listas.
                     </TextBlock>
                 </Grid>
             </Border>
 
-            <!-- Botones centrales -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                <Button Content="Añadir ➜" MinWidth="110" Margin="0,0,0,8" ToolTip="Añadir los discos marcados a la lista de seleccionados"
-                        Command="{Binding AddToSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=ReleasesList}" />
-                <Button Content="⬅ Quitar" MinWidth="110" Margin="0,0,0,8" ToolTip="Quitar de seleccionados"
-                        Command="{Binding RemoveFromSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=SelectedList}" />
-                <Button Content="Vaciar" MinWidth="110" Command="{Binding ClearSelectedCommand}" />
-            </StackPanel>
+            <GridSplitter Grid.Column="1" Width="8" Margin="0" DragCompleted="SourceSplitter_DragCompleted" />
 
-            <!-- Seleccionados -->
-            <Border Grid.Column="2" Style="{StaticResource Card}">
+            <!-- Nivel 2 y 3: discos arriba, pistas abajo -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="120" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="0.7*" MinHeight="100" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource Heading}">
+                            <Run Text="Discos" /><Run Text=" (" /><Run Text="{Binding VisibleReleaseCount, Mode=OneWay}" /><Run Text=")" />
+                        </TextBlock>
+                        <ListBox x:Name="ReleasesList" Grid.Row="1" ItemsSource="{Binding ReleasesView}"
+                                 ItemTemplate="{StaticResource ReleaseTemplate}" SelectionMode="Extended"
+                                 SelectionChanged="ReleasesList_SelectionChanged"
+                                 MouseDoubleClick="ReleasesList_MouseDoubleClick" />
+                        <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" Margin="12" IsHitTestVisible="False"
+                                   Visibility="{Binding Releases.Count, Converter={StaticResource NullToVisInv}}">
+                            Elige una fuente a la izquierda.
+                        </TextBlock>
+                        <Button Grid.Row="2" Content="Añadir discos completos ➜" HorizontalAlignment="Right" Margin="0,8,0,0"
+                                ToolTip="Añade todas las pistas de los discos marcados (Ctrl / Shift + clic)"
+                                Command="{Binding AddReleasesCommand}" CommandParameter="{Binding SelectedItems, ElementName=ReleasesList}" />
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Row="1" Height="8" Width="Auto" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Style="{StaticResource Heading}" Text="{Binding TracksHeader}" />
+                            <c:Spinner Width="14" Height="14" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0"
+                                       Visibility="{Binding IsLoadingTracks, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                        <ListBox x:Name="TracksList" Grid.Row="1" ItemsSource="{Binding Tracks}"
+                                 ItemTemplate="{StaticResource TrackTemplate}" SelectionMode="Extended"
+                                 MouseDoubleClick="TracksList_MouseDoubleClick" />
+                        <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" Margin="12" IsHitTestVisible="False"
+                                   Visibility="{Binding Tracks.Count, Converter={StaticResource NullToVisInv}}">
+                            Marca un disco arriba para ver sus pistas.
+                        </TextBlock>
+                        <Button Grid.Row="2" Content="Añadir pistas ➜" HorizontalAlignment="Right" Margin="0,8,0,0"
+                                ToolTip="Añade sólo las pistas marcadas (Ctrl / Shift + clic)"
+                                Command="{Binding AddTracksCommand}" CommandParameter="{Binding SelectedItems, ElementName=TracksList}" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <GridSplitter Grid.Column="3" Width="8" Margin="0" />
+
+            <!-- Seleccionados (pistas agrupadas por disco) -->
+            <Border Grid.Column="4" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Style="{StaticResource Heading}">
-                        <Run Text="Seleccionados" /><Run Text=" (" /><Run Text="{Binding Selected.Count, Mode=OneWay}" /><Run Text=")" />
+                        <Run Text="Seleccionados" /><Run Text=" (" /><Run Text="{Binding Selected.Count, Mode=OneWay}" /><Run Text=" pistas)" />
                     </TextBlock>
-                    <ListBox x:Name="SelectedList" Grid.Row="1" ItemsSource="{Binding Selected}"
-                             ItemTemplate="{StaticResource ReleaseTemplate}" SelectionMode="Extended"
-                             MouseDoubleClick="SelectedList_MouseDoubleClick" />
+                    <ListBox x:Name="SelectedList" Grid.Row="1" ItemsSource="{Binding SelectedView}"
+                             ItemTemplate="{StaticResource TrackTemplate}" SelectionMode="Extended"
+                             MouseDoubleClick="SelectedList_MouseDoubleClick">
+                        <ListBox.GroupStyle>
+                            <GroupStyle ContainerStyle="{StaticResource GroupHeader}" />
+                        </ListBox.GroupStyle>
+                    </ListBox>
                     <TextBlock Grid.Row="1" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320" IsHitTestVisible="False"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="12" IsHitTestVisible="False"
                                Visibility="{Binding Selected.Count, Converter={StaticResource NullToVisInv}}">
-                        Selecciona discos a la izquierda (Ctrl / Shift + clic) y pulsa «Añadir». Puedes ir acumulando de varias listas.
+                        Aquí se acumulan las pistas a descargar. Puedes ir añadiendo desde distintas carpetas y listas.
                     </TextBlock>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="⬅ Quitar" Margin="0,0,8,0" ToolTip="Quitar las pistas marcadas"
+                                Command="{Binding RemoveFromSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=SelectedList}" />
+                        <Button Content="Vaciar" Command="{Binding ClearSelectedCommand}" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>
@@ -157,7 +256,7 @@
 
             <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <c:Spinner Margin="0,0,10,0" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                <TextBlock Text="{Binding BusyText}" Style="{StaticResource Muted}" VerticalAlignment="Center" MaxWidth="600"
+                <TextBlock Text="{Binding BusyText}" Style="{StaticResource Muted}" VerticalAlignment="Center" MaxWidth="700"
                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource Muted}" VerticalAlignment="Center"
                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisInv}}" />

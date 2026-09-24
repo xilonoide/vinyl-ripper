@@ -37,9 +37,9 @@ public static class TrackMatcher
     }
 
     /// <summary>Consulta para buscar la pista en YouTube cuando no hay vídeo asociado.</summary>
-    public static string BuildSearchQuery(ReleaseDetails release, Track track)
+    public static string BuildSearchQuery(string releaseArtist, Track track)
     {
-        var artist = track.Artist ?? release.Artist;
+        var artist = track.Artist ?? releaseArtist;
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(artist) && !artist.Equals("Various", StringComparison.OrdinalIgnoreCase))
             sb.Append(artist).Append(' ');

@@ -54,6 +54,16 @@ public sealed record ReleaseDetails(
     IReadOnlyList<Track> Tracks,
     IReadOnlyList<Video> Videos);
 
+/// <summary>
+/// Una pista concreta de un disco, elegida para descargar. <paramref name="Index"/> es su posición
+/// (1..N) dentro del tracklist completo y <paramref name="TotalTracks"/> el total, para numerar archivos.
+/// </summary>
+public sealed record TrackSelection(ReleaseSummary Release, Track Track, int Index, int TotalTracks)
+{
+    public string Key => $"{Release.ReleaseId}:{Index}";
+    public string DisplayPosition => string.IsNullOrEmpty(Track.Position) ? Index.ToString() : Track.Position;
+}
+
 public sealed record DiscogsIdentity(long Id, string Username);
 
 public sealed class DiscogsException : Exception

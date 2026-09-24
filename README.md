@@ -21,8 +21,8 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 | | |
 |---|---|
 | 🔐 **Token cifrado** | El token personal de Discogs se guarda cifrado con **AES-256-GCM** (clave derivada con PBKDF2 a partir de la identidad de máquina + usuario). Nunca toca el disco en claro. |
-| 📚 **Todas tus listas** | Colección (todas las carpetas), deseados, inventario y listas personalizadas, desde un único desplegable. |
-| ✅ **Selección acumulativa** | Marca discos con Ctrl / Shift + clic, pásalos a *Seleccionados* y sigue añadiendo desde otras listas. |
+| 🗂 **Tres niveles** | Árbol de fuentes (Colección → carpetas, Deseados, Inventario, Listas → listas) → discos → pistas. |
+| ✅ **Selección acumulativa** | Marca discos completos o pistas sueltas con Ctrl / Shift + clic, pásalos a *Seleccionados* (agrupados por disco) y sigue añadiendo desde otras carpetas o listas. |
 | 🎵 **Vídeos de Discogs primero** | Si la edición tiene vídeos de YouTube asociados en Discogs se usan esos; si no, se busca `artista + pista`. |
 | 📦 **yt-dlp autoinstalable** | Si no hay `yt-dlp` en el sistema se descarga solo a `Documentos/vinyl-ripper/tools`. |
 | 📊 **Progreso real** | Spinner para lo indeterminado y barra de progreso con pista actual / total cuando se conoce. |
@@ -33,24 +33,30 @@ Elige una de tus listas de Discogs (colección, deseados, inventario, listas per
 ## 🖼️ Cómo se usa
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Lista de Discogs [ Colección · Todo (312) ▾ ] ↻     [ Filtrar…     ] ⚙  │
-├───────────────────────────────┬──────────┬───────────────────────────────┤
-│ Discos (312)                  │          │ Seleccionados (3)             │
-│ ▪ Pink Floyd – Animals  1977  │ Añadir ➜ │ ▪ Nirvana – Nevermind    1991 │
-│ ▪ Pink Floyd – Meddle   1971  │ ⬅ Quitar │ ▪ Tool – Lateralus       2001 │
-│ ▪ Radiohead – Kid A     2000  │  Vaciar  │ ▪ Portishead – Dummy     1994 │
-│ …                             │          │                               │
-├───────────────────────────────┴──────────┴───────────────────────────────┤
-│ [⬇ Descargar MP3] [📂 Abrir carpeta de salida]     ◌ Descargando 7/38 …  │
-│ ████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ 🎧 Vinyl Ripper                                        [ Filtrar discos…      ] ⚙  │
+├──────────────────┬─────────────────────────────────┬───────────────────────────────┤
+│ Fuente        ↻  │ Discos (48)                     │ Seleccionados (11 pistas)     │
+│ ▾ 📚 Colección   │ ▪ Pink Floyd – Animals    1977  │ Pink Floyd – Animals · 2      │
+│    🗂 Todo   312 │ ▪ Pink Floyd – Meddle     1971  │   A2  Dogs             17:06  │
+│    📁 Rock    48 │ ▪ Radiohead – Kid A       2000  │   B2  Sheep            10:20  │
+│    📁 Jazz    27 │        [Añadir discos completos ➜] │ Nirvana – Nevermind · 9    │
+│  ♥ Deseados      ├─────────────────────────────────┤   01  Smells Like…      5:01  │
+│  🏷 Inventario   │ Pistas · Pink Floyd – Animals   │   …                           │
+│ ▾ 📝 Listas      │ A1 Pigs On The Wing (Part One)  │                               │
+│    📄 Para el DJ │ A2 Dogs                  17:06  │                               │
+│                  │ B1 Pigs (Three Different Ones)  │                               │
+│                  │            [Añadir pistas ➜]    │        [⬅ Quitar] [Vaciar]    │
+├──────────────────┴─────────────────────────────────┴───────────────────────────────┤
+│ [⬇ Descargar MP3] [📂 Abrir carpeta de salida]          ◌ Descargando 7/11 · Dogs… │
+│ ██████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 1. Pulsa **⚙** y pega tu token de Discogs (*discogs.com → Settings → Developers → Generate new token*). Puedes comprobarlo con **Probar**.
-2. Elige una lista en el desplegable; los discos se cargan con progreso por páginas.
-3. Selecciona discos y pulsa **Añadir ➜**. Cambia de lista y sigue añadiendo.
-4. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada.
+2. En **Fuente** elige una carpeta de la colección, deseados, inventario o una lista; los discos se cargan con progreso por páginas.
+3. Marca discos y pulsa **Añadir discos completos ➜**, o marca uno para ver sus **Pistas** y añade sólo las que quieras con **Añadir pistas ➜**. Cambia de carpeta o lista y sigue acumulando.
+4. **⬇ Descargar MP3**. Cada descarga va a su propia carpeta numerada; el progreso es por pista.
 5. **📂 Abrir carpeta de salida** abre la última carpeta creada en el Explorador.
 
 ### 📁 Dónde acaba todo
@@ -115,10 +121,10 @@ vinyl-ripper/
 │   │   ├── YouTube/            ToolLocator · YtDlpInstaller · YtDlpDownloader · parser de progreso
 │   │   └── Ripping/            RipService · TrackMatcher · OutputFolders · FileNameSanitizer
 │   └── VinylRipper.Windows/    🪟 WPF (net10.0-windows), MVVM con CommunityToolkit.Mvvm
-│       ├── Themes/Dark.xaml    Tema oscuro completo (ComboBox, ListBox, ScrollBar, ProgressBar…)
+│       ├── Themes/Dark.xaml    Tema oscuro completo (TreeView, ListBox, ComboBox, ScrollBar, ProgressBar…)
 │       ├── Controls/           Spinner · DarkTitleBar · converters
 │       ├── Dialogs/            DarkMessageBox · SettingsWindow
-│       └── ViewModels/         MainViewModel · SettingsViewModel
+│       └── ViewModels/         MainViewModel · SourceNode · SettingsViewModel
 └── tests/
     └── VinylRipper.Tests/      🧪 xUnit sobre el core
 ```

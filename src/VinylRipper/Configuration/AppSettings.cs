@@ -32,20 +32,29 @@ public sealed class AppSettings
     /// <summary>Texto del filtro de la lista de discos.</summary>
     public string SearchFilter { get; set; } = string.Empty;
 
-    /// <summary>Discos acumulados en la lista de seleccionados.</summary>
-    public List<SavedRelease> SelectedReleases { get; set; } = [];
+    /// <summary>Pistas acumuladas en la lista de seleccionados.</summary>
+    public List<SavedTrack> SelectedTracks { get; set; } = [];
+
+    /// <summary>Ancho (en estrellas) del panel de fuente/árbol.</summary>
+    public double SourcePaneWidth { get; set; } = 0.6;
 
     public WindowPlacement Window { get; set; } = new();
 }
 
-public sealed class SavedRelease
+public sealed class SavedTrack
 {
     public long ReleaseId { get; set; }
     public string Artist { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
+    public string ReleaseTitle { get; set; } = string.Empty;
     public int? Year { get; set; }
     public string? Format { get; set; }
     public string? Thumb { get; set; }
+    public int Index { get; set; }
+    public int TotalTracks { get; set; }
+    public string Position { get; set; } = string.Empty;
+    public string TrackTitle { get; set; } = string.Empty;
+    public string? TrackArtist { get; set; }
+    public string? Duration { get; set; }
 }
 
 public sealed class WindowPlacement

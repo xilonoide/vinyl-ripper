@@ -64,7 +64,7 @@ public sealed partial class DiscogsClient
             {
                 var id = f.GetProperty("id").GetInt64();
                 var name = f.GetProperty("name").GetString() ?? $"Carpeta {id}";
-                var label = id switch { 0 => "Colección · Todo", 1 => "Colección · Sin categoría", _ => $"Colección · {name}" };
+                var label = id switch { 0 => "Todo", 1 => "Sin categoría", _ => name };
                 result.Add(new DiscogsListDescriptor(DiscogsListKind.CollectionFolder, id, label, TryInt(f, "count")));
             }
         }
@@ -80,7 +80,7 @@ public sealed partial class DiscogsClient
                 {
                     var id = l.GetProperty("id").GetInt64();
                     var name = l.GetProperty("name").GetString() ?? $"Lista {id}";
-                    result.Add(new DiscogsListDescriptor(DiscogsListKind.UserList, id, $"Lista · {name}", TryInt(l, "item_count")));
+                    result.Add(new DiscogsListDescriptor(DiscogsListKind.UserList, id, name, TryInt(l, "item_count")));
                 }
             }
         }

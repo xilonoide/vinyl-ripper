@@ -133,12 +133,9 @@ public class TrackMatcherTests
     [Fact]
     public void BuildSearchQuery_prefers_track_artist_and_skips_various()
     {
-        var release = new ReleaseDetails(1, "Various", "Compilation", 2000, [], []);
-        Assert.Equal("Dogs", TrackMatcher.BuildSearchQuery(release, new Track("1", "Dogs", null, null)));
-        Assert.Equal("Pink Floyd Dogs", TrackMatcher.BuildSearchQuery(release, new Track("1", "Dogs", "Pink Floyd", null)));
-
-        var single = new ReleaseDetails(1, "Pink Floyd", "Animals", 1977, [], []);
-        Assert.Equal("Pink Floyd Dogs", TrackMatcher.BuildSearchQuery(single, new Track("1", "Dogs", null, null)));
+        Assert.Equal("Dogs", TrackMatcher.BuildSearchQuery("Various", new Track("1", "Dogs", null, null)));
+        Assert.Equal("Pink Floyd Dogs", TrackMatcher.BuildSearchQuery("Various", new Track("1", "Dogs", "Pink Floyd", null)));
+        Assert.Equal("Pink Floyd Dogs", TrackMatcher.BuildSearchQuery("Pink Floyd", new Track("1", "Dogs", null, null)));
     }
 }
 
@@ -147,15 +144,25 @@ public class RipServiceNamingTests
     [Fact]
     public void Release_folder_name_includes_artist_title_and_year()
     {
-        var release = new ReleaseDetails(1, "AC/DC", "Back In Black", 1980, [], []);
+        var release = new ReleaseSummary(1, "AC/DC", "Back In Black", 1980, null, null);
         Assert.Equal("AC_DC - Back In Black (1980)", RipService.BuildReleaseFolderName(release));
     }
 
     [Fact]
     public void Release_folder_name_without_artist_or_year()
     {
-        var release = new ReleaseDetails(7, "", "Sin Nombre", null, [], []);
+        var release = new ReleaseSummary(7, "", "Sin Nombre", null, null, null);
         Assert.Equal("Sin Nombre", RipService.BuildReleaseFolderName(release));
+    }
+
+    [Fact]
+    public void TrackSelection_key_and_position()
+    {
+        var release = new ReleaseSummary(1, "A", "B", null, null, null);
+        var sel = new TrackSelection(release, new Track("A2", "Dogs", null, null), 2, 5);
+        Assert.Equal("1:2", sel.Key);
+        Assert.Equal("A2", sel.DisplayPosition);
+        Assert.Equal("3", new TrackSelection(release, new Track("", "X", null, null), 3, 5).DisplayPosition);
     }
 
     [Fact]

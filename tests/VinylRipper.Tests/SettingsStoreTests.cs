@@ -24,7 +24,7 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.Null(settings.EncryptedDiscogsToken);
         Assert.Equal(0, settings.AudioQuality);
-        Assert.Empty(settings.SelectedReleases);
+        Assert.Empty(settings.SelectedTracks);
         Assert.Equal(1280, settings.Window.Width);
     }
 
@@ -41,7 +41,7 @@ public sealed class SettingsStoreTests : IDisposable
             YtDlpPath = @"C:\tools\yt-dlp.exe",
             AudioQuality = 5,
             SearchFilter = "pink",
-            SelectedReleases = [new SavedRelease { ReleaseId = 42, Artist = "Pink Floyd", Title = "Animals", Year = 1977, Format = "Vinyl" }],
+            SelectedTracks = [new SavedTrack { ReleaseId = 42, Artist = "Pink Floyd", ReleaseTitle = "Animals", Year = 1977, Format = "Vinyl", Index = 2, TotalTracks = 5, Position = "A2", TrackTitle = "Dogs" }],
             Window = new WindowPlacement { Left = 10, Top = 20, Width = 800, Height = 600, Maximized = true },
         };
 
@@ -57,9 +57,11 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Null(loaded.FfmpegPath);
         Assert.Equal(5, loaded.AudioQuality);
         Assert.Equal("pink", loaded.SearchFilter);
-        var r = Assert.Single(loaded.SelectedReleases);
+        var r = Assert.Single(loaded.SelectedTracks);
         Assert.Equal(42, r.ReleaseId);
-        Assert.Equal("Animals", r.Title);
+        Assert.Equal("Animals", r.ReleaseTitle);
+        Assert.Equal("Dogs", r.TrackTitle);
+        Assert.Equal(2, r.Index);
         Assert.Equal(1977, r.Year);
         Assert.True(loaded.Window.Maximized);
         Assert.Equal(10, loaded.Window.Left);
